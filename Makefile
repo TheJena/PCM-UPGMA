@@ -1,17 +1,28 @@
-.PHONY: clean datasets
+.PHONY: clean decrypt
 
-SECRET := "Something I personally told you"
+SECRET ?= "Something I personally told you"
 
 clean:
-	find datasets -iname "*.xlsx" -exec rm -v {} \;
+	@find . -iname "*.gpg" -print0 |			\
+	while IFS= read -r -d '' f; do				\
+		if test -f "$${f%.gpg}"; then			\
+			rm "$${f%.gpg}";			\
+			echo "Removed $${f%.gpg}";		\
+		fi						\
+	done
 
-datasets: $(shell ls -v1 datasets | grep -i '.xlsx.gpg' | sed 's@^@datasets/@')
-	@for f in $^; do 						\
-		gpg 							\
-			--batch						\
-			--decrypt					\
-			--output "$${f%.gpg}"				\
-			--passphrase "$(SECRET)"			\
-			--pinentry-mode loopback			\
-			 "$${f}";					\
+decrypt:
+	@find . -iname "*.gpg" -print0 |			\
+	while IFS= read -r -d '' f; do				\
+		if ! test -f "$${f%.gpg}"; then			\
+			gpg					\
+				--batch				\
+				--decrypt			\
+				--output "$${f%.gpg}"		\
+				--passphrase "$(SECRET)"	\
+				--pinentry-mode loopback	\
+				--quiet				\
+				"$${f}";			\
+			echo "Created $${f%.gpg}";		\
+		fi						\
 	done
