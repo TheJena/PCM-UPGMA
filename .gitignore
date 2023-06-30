@@ -4,3 +4,4 @@
 *.svg
 *.toml
 *.xlsx
+.DS_Store
