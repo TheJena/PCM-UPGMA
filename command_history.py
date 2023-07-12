@@ -58,8 +58,11 @@ def plot_dendrogram(model, **kwargs):
     # Plot the corresponding dendrogram
     dendrogram(linkage_matrix, **kwargs)
 
+base_folder = "datasets/"
+base_file = "preprocessed_inputs_04.xlsx"
 
-dfs = pd.read_excel("2023_preprocessed_inputs.xlsx", sheet_name=None)
+
+dfs = pd.read_excel(base_folder + base_file, sheet_name=None)
 dfs.keys()
 dfs['boolean_matrix']
 dfs['boolean_matrix'].set_index("parameter").astype(int)
@@ -74,10 +77,10 @@ model = AgglomerativeClustering(2, linkage="average", metric="euclidean")
 model = AgglomerativeClustering(linkage="average", metric="euclidean", distance_threshold=0, n_clusters=None)
 model.fit(df_bool.transpose())
 plt.clf()
-plt.clg()
 plt.cla()
 plt.title("Hierarchical Clustering Dendrogram\n(UPGMA method)")
-plot_dendrogram(model, labels=list(df_bool.transpose().columns))
+labels = list(df_bool.columns)
+plot_dendrogram(model, labels=labels)
 plt.xlabel("32 dialetti, from 'Guardiano_et_al_TableA_2023_Apr3'")
 plt.savefig("./plot.svg", dpi=1200)
 
@@ -91,18 +94,17 @@ df_bool
 df_bool.transpose()
 df_bool.transpose().sum(axis=0)
 df_bool.transpose().sum(axis=0).isin(range(1, 31))
-range(1, 31).max()
 max(range(1, 31))
 df_bool
 
-dfs = pd.read_excel("2023_preprocessed_inputs.xlsx", sheet_name=None)
+dfs = pd.read_excel(base_folder + base_file, sheet_name=None)
 df = dfs['no_all_zero_rules_imputed_PGE_W']
 df
 df.astype(str).eq("?").sum().sum()
 
-dfs = pd.read_excel("2023_preprocessed_inputs.xlsx", sheet_name=None)
+dfs = pd.read_excel(base_folder + base_file, sheet_name=None)
 df.astype(str).eq("?").sum().sum()
-dfs = pd.read_excel("2023_preprocessed_inputs.xlsx", sheet_name=None)
+dfs = pd.read_excel(base_folder + base_file, sheet_name=None)
 df.astype(str).eq("?").sum().sum()
 df = dfs['no_all_zero_rules_imputed_PGE_W']
 df.astype(str).eq("?").sum().sum()
@@ -160,7 +162,7 @@ plt.clf()
 plt.cla()
 plt.title("Hierarchical Clustering Dendrogram\n(UPGMA method)")
 
-plot_dendrogram(model, labels=list(df_clust.columns))
+plot_dendrogram(model, labels=list(df_clust.transpose().columns))
 plt.xlabel("32 dialetti, from 'Guardiano_et_al_TableA_2023_Apr3' imputed\n(PGE=-, WAP=++-, GFL=-, PGL=+)")
 plt.savefig("./plot2.svg", dpi=1200)
 plt.clf()

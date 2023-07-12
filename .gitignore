@@ -4,4 +4,7 @@
 *.svg
 *.toml
 *.xlsx
+*.xlsx#
 .DS_Store
+settings.sh
+src/script_jaccard.py
