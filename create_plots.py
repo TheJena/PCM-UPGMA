@@ -58,38 +58,44 @@ def plot_dendrogram(model, **kwargs):
     # Plot the corresponding dendrogram
     dendrogram(linkage_matrix, **kwargs)
 
+def read_and_make_dendrogram(filename, sheet, do_transpose, problem_char, xlabel, title, out_filename, dpi=1200):
+    dfs = pd.read_excel(filename, sheet_name=None)
+    df = dfs[sheet]
+
+    df_t = df
+    if do_transpose:
+        df_t = df.transpose()
+
+    # Row/Column index removal
+    if do_transpose:
+        df_t.columns = df_t.iloc[0, :].to_list()
+        df_t = df_t.iloc[list(range(1, 33)), :]
+    else:
+        df_t.index = df_t.iloc[: , 0].to_list()
+        df_t = df_t.iloc[: , list(range(1, len(df_t.keys())))]
+
+    selector = [param for param, flag in df_t.astype(str).eq(problem_char).sum(axis=0).eq(0).to_dict().items() if flag]
+    df_bool_imputed = df_t.loc[:, selector].replace({"+": True, "-": False, "1": True, "0": False, 1: True, 0: False}).astype("boolean")
+
+    df_clust = df_bool_imputed.astype(int)
+    model = AgglomerativeClustering(linkage="average", metric="euclidean", distance_threshold=0, n_clusters=None)
+    model.fit(df_clust)
+    plt.clf()
+    plt.cla()
+    plt.title(title)
+    plot_dendrogram(model, labels=list(df_clust.transpose().columns))
+    plt.xlabel(xlabel)
+    plt.savefig(out_filename, dpi=dpi)
+
 base_folder = "datasets/"
 base_file = ["preprocessed_inputs_01.xlsx", "preprocessed_inputs_02.xlsx", "preprocessed_inputs_03.xlsx", "preprocessed_inputs_04.xlsx"]
 sheet_name = ["Foglio1", "Foglio1", "Foglio1", "no_all_zero_rules_imputed_PGE_W"]
 need_to_transpose = [False, False, False, True]
 unallowed_char = ["?", "?", "?", "0"]
 output_names = ["TMP", "TMP", "TMP", "32 dialetti, from 'TableA 2023', imputed (PGE=-, WAP=++-, GFL=-, PGL=+)"]
-index = 3
+titles = ["Hierarchical Clustering Dendrogram\n(UPGMA method)", "Hierarchical Clustering Dendrogram\n(UPGMA method)", "Hierarchical Clustering Dendrogram\n(UPGMA method)", "Hierarchical Clustering Dendrogram\n(UPGMA method)"]
 
-dfs = pd.read_excel(base_folder + base_file[index], sheet_name=None)
-df = dfs[sheet_name[index]]
+num_plots = 4
 
-df_t = df
-if need_to_transpose[index]:
-    df_t = df.transpose()
-
-# Row/Column index removal
-if need_to_transpose[index]:
-    df_t.columns = df_t.iloc[0, :].to_list()
-    df_t = df_t.iloc[list(range(1, 33)), :]
-else:
-    df_t.index = df_t.iloc[: , 0].to_list()
-    df_t = df_t.iloc[: , list(range(1, len(df_t.keys())))]
-
-selector = [param for param, flag in df_t.astype(str).eq(unallowed_char[index]).sum(axis=0).eq(0).to_dict().items() if flag]
-df_bool_imputed = df_t.loc[:, selector].replace({"+": True, "-": False, "1": True, "0": False, 1: True, 0: False}).astype("boolean")
-
-df_clust = df_bool_imputed.astype(int)
-model = AgglomerativeClustering(linkage="average", metric="euclidean", distance_threshold=0, n_clusters=None)
-model.fit(df_clust)
-plt.clf()
-plt.cla()
-plt.title("Hierarchical Clustering Dendrogram\n(UPGMA method)")
-plot_dendrogram(model, labels=list(df_clust.transpose().columns))
-plt.xlabel(output_names[index])
-plt.savefig("./plot2.svg", dpi=1200)
+for i in range(num_plots):
+    read_and_make_dendrogram(base_folder + base_file[i], sheet_name[i], need_to_transpose[i], unallowed_char[i], output_names[i], titles[i], "./plot" + str(i + 1) + ".svg")
