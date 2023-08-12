@@ -54,7 +54,7 @@ def plot_dendrogram(model, **kwargs):
     linkage_matrix = np.column_stack(
         [model.children_, model.distances_, counts]
     ).astype(float)
-
+    
     # Plot the corresponding dendrogram
     dendrogram(linkage_matrix, **kwargs)
 
@@ -73,6 +73,8 @@ def read_and_make_dendrogram(filename, sheet, do_transpose, problem_char, xlabel
     else:
         df_t.index = df_t.iloc[: , 0].to_list()
         df_t = df_t.iloc[: , list(range(1, len(df_t.keys())))]
+    
+    df_t = df_t.sort_index()
 
     selector = [param for param, flag in df_t.astype(str).eq(problem_char).sum(axis=0).eq(0).to_dict().items() if flag]
     df_bool_imputed = df_t.loc[:, selector].replace({"+": True, "-": False, "1": True, "0": False, 1: True, 0: False}).astype("boolean")
