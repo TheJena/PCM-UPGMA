@@ -1,4 +1,4 @@
-.PHONY: black clean decrypt encrypt encrypt-all encrypt-pdf
+.PHONY: black clean decrypt decrypt-all encrypt encrypt-all encrypt-pdf
 
 SHELL := /bin/bash
 SECRET ?= "Something I personally told you"
@@ -19,6 +19,8 @@ black:
 	@echo
 
 clean:
+	@find . -iname "*.pyc"       -exec rm -v  {} \;
+	@find . -iname "__pycache__" -empty -delete
 	@find . -iname "*.gpg" -print0				\
 	| while IFS= read -r -d '' f; do			\
 		if test -f "$${f%.gpg}"; then			\
@@ -28,6 +30,21 @@ clean:
 	done
 
 decrypt:
+	@if ! test -f "$${FILE}"; then						\
+		echo -e "Usage:\n\tmake decrypt FILE=./foo/bar/path.gpg";	\
+	else									\
+		gpg								\
+			--batch							\
+			--decrypt						\
+			--output "$${FILE%.gpg}"				\
+			--passphrase "$(SECRET)"				\
+			--pinentry-mode loopback				\
+			--quiet							\
+			"$${FILE}"						\
+		&& echo "Created $${FILE%.gpg}";				\
+	fi
+
+decrypt-all:
 	@find . -iname "*.gpg" -print0				\
 	| while IFS= read -r -d '' f; do			\
 		if ! test -f "$${f%.gpg}"; then			\
@@ -38,8 +55,8 @@ decrypt:
 				--passphrase "$(SECRET)"	\
 				--pinentry-mode loopback	\
 				--quiet				\
-				"$${f}";			\
-			echo "Created $${f%.gpg}";		\
+				"$${f}"				\
+			&& echo "Created $${f%.gpg}";		\
 		fi						\
 	done
 
