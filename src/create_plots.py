@@ -55,11 +55,21 @@ def plot_dendrogram(model, **kwargs):
     linkage_matrix = np.column_stack(
         [model.children_, model.distances_, counts]
     ).astype(float)
-    
+
     # Plot the corresponding dendrogram
     return dendrogram(linkage_matrix, **kwargs)
 
-def read_and_make_dendrogram(filename, sheet, do_transpose, problem_char, xlabel, title, out_filename, dpi=1200):
+
+def read_and_make_dendrogram(
+    filename,
+    sheet,
+    do_transpose,
+    problem_char,
+    xlabel,
+    title,
+    out_filename,
+    dpi=1200,
+):
     dfs = pd.read_excel(filename, sheet_name=None)
     df = dfs[sheet]
 
@@ -72,16 +82,36 @@ def read_and_make_dendrogram(filename, sheet, do_transpose, problem_char, xlabel
         df_t.columns = df_t.iloc[0, :].to_list()
         df_t = df_t.iloc[list(range(1, 33)), :]
     else:
-        df_t.index = df_t.iloc[: , 0].to_list()
-        df_t = df_t.iloc[: , list(range(1, len(df_t.keys())))]
-    
+        df_t.index = df_t.iloc[:, 0].to_list()
+        df_t = df_t.iloc[:, list(range(1, len(df_t.keys())))]
+
     df_t = df_t.sort_index()
 
-    selector = [param for param, flag in df_t.astype(str).eq(problem_char).sum(axis=0).eq(0).to_dict().items() if flag]
-    df_bool_imputed = df_t.loc[:, selector].replace({"+": True, "-": False, "1": True, "0": False, 1: True, 0: False}).astype("boolean")
+    selector = [
+        param
+        for param, flag in df_t.astype(str)
+        .eq(problem_char)
+        .sum(axis=0)
+        .eq(0)
+        .to_dict()
+        .items()
+        if flag
+    ]
+    df_bool_imputed = (
+        df_t.loc[:, selector]
+        .replace(
+            {"+": True, "-": False, "1": True, "0": False, 1: True, 0: False}
+        )
+        .astype("boolean")
+    )
 
     df_clust = df_bool_imputed.astype(int)
-    model = AgglomerativeClustering(linkage="average", metric="euclidean", distance_threshold=0, n_clusters=None)
+    model = AgglomerativeClustering(
+        linkage="average",
+        metric="euclidean",
+        distance_threshold=0,
+        n_clusters=None,
+    )
     model.fit(df_clust)
     plt.clf()
     plt.cla()
@@ -93,16 +123,41 @@ def read_and_make_dendrogram(filename, sheet, do_transpose, problem_char, xlabel
     resulting_distances = dict()
     # There is probably a faster/smarter/better way to do this and/or using the dendrogram itself
     for s_language in languages:
-        resulting_distances[s_language] = distance.cdist(df_clust.values, np.array([df_clust.loc[s_language]]), metric='euclidean')
+        resulting_distances[s_language] = distance.cdist(
+            df_clust.values,
+            np.array([df_clust.loc[s_language]]),
+            metric="euclidean",
+        )
     return [resulting_distances, resulting_dendrogram]
 
+
 base_folder = "datasets/"
-base_file = ["preprocessed_inputs_01.xlsx", "preprocessed_inputs_02.xlsx", "preprocessed_inputs_03.xlsx", "preprocessed_inputs_04.xlsx"]
-sheet_name = ["Foglio1", "Foglio1", "Foglio1", "no_all_zero_rules_imputed_PGE_W"]
+base_file = [
+    "preprocessed_inputs_01.xlsx",
+    "preprocessed_inputs_02.xlsx",
+    "preprocessed_inputs_03.xlsx",
+    "preprocessed_inputs_04.xlsx",
+]
+sheet_name = [
+    "Foglio1",
+    "Foglio1",
+    "Foglio1",
+    "no_all_zero_rules_imputed_PGE_W",
+]
 need_to_transpose = [False, False, False, True]
 unallowed_char = ["?", "?", "?", "0"]
-output_names = ["TMP", "TMP", "TMP", "32 dialetti, from 'TableA 2023', imputed (PGE=-, WAP=++-, GFL=-, PGL=+)"]
-titles = ["Hierarchical Clustering Dendrogram\n(UPGMA method)", "Hierarchical Clustering Dendrogram\n(UPGMA method)", "Hierarchical Clustering Dendrogram\n(UPGMA method)", "Hierarchical Clustering Dendrogram\n(UPGMA method)"]
+output_names = [
+    "TMP",
+    "TMP",
+    "TMP",
+    "32 dialetti, from 'TableA 2023', imputed (PGE=-, WAP=++-, GFL=-, PGL=+)",
+]
+titles = [
+    "Hierarchical Clustering Dendrogram\n(UPGMA method)",
+    "Hierarchical Clustering Dendrogram\n(UPGMA method)",
+    "Hierarchical Clustering Dendrogram\n(UPGMA method)",
+    "Hierarchical Clustering Dendrogram\n(UPGMA method)",
+]
 
 num_plots = 4
 results = []
@@ -110,13 +165,23 @@ groupings = []
 no_groups_index = "C0"
 
 for i in range(num_plots):
-    results += [read_and_make_dendrogram(base_folder + base_file[i], sheet_name[i], need_to_transpose[i], unallowed_char[i], output_names[i], titles[i], "./plot" + str(i + 1) + ".svg")]
+    results += [
+        read_and_make_dendrogram(
+            base_folder + base_file[i],
+            sheet_name[i],
+            need_to_transpose[i],
+            unallowed_char[i],
+            output_names[i],
+            titles[i],
+            "./plot" + str(i + 1) + ".svg",
+        )
+    ]
     groupings += [[dict(), dict()]]
-    for j in range(len(results[i][1]['ivl'])):
-        color = results[i][1]['leaves_color_list'][j]
-        dialect = results[i][1]['ivl'][j]
+    for j in range(len(results[i][1]["ivl"])):
+        color = results[i][1]["leaves_color_list"][j]
+        dialect = results[i][1]["ivl"][j]
         groupings[i][0][dialect] = color
-        if(color not in groupings[i][1].keys()):
+        if color not in groupings[i][1].keys():
             groupings[i][1][color] = []
         groupings[i][1][color] += [dialect]
 
@@ -128,7 +193,7 @@ total_num_matches = dict()
 languages = list(groupings[0][0].keys())
 languages.sort()
 clusters = []
-for i in range(num_plots + 1):    
+for i in range(num_plots + 1):
     cluster = dict()
     for _ in languages:
         cluster[_] = []
@@ -141,13 +206,17 @@ for source_dialect in languages:
         for k in range(num_plots):
             source_color = groupings[k][0][source_dialect]
             dest_color = groupings[k][0][dest_dialect]
-            if (source_color != no_groups_index) and (source_color == dest_color):
+            if (source_color != no_groups_index) and (
+                source_color == dest_color
+            ):
                 num_single_matches += 1
         num_matches += [num_single_matches]
         clusters[num_single_matches][source_dialect] += [dest_dialect]
     total_num_matches[source_dialect] = num_matches
 
-final_result = pd.DataFrame.from_dict(total_num_matches, orient="index", columns=languages)
+final_result = pd.DataFrame.from_dict(
+    total_num_matches, orient="index", columns=languages
+)
 final_result.to_excel("result.xlsx")
 
 for _ in languages:
