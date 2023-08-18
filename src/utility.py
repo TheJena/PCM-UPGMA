@@ -43,6 +43,8 @@ from os import remove
 from os.path import realpath
 from tempfile import NamedTemporaryFile
 import numpy as np
+from script_jaccard import jaccard as ceolin_jaccard
+import pandas as pd
 
 ALLOWED_EXTENSIONS = defaultdict(
     lambda: "to_pickle",
@@ -62,6 +64,17 @@ class HelpFormatter(
     RawDescriptionHelpFormatter,
 ):
     pass
+
+
+def jaccard(l1, l2, *args, **kwargs):
+    """
+    Returns (1 / ceolin_jaccard) because ceolin's jaccard function returns distance instead of similarity
+    """
+    l1 = ["+" if el > 0 else "-" for el in l1]
+    l2 = ["+" if el > 0 else "-" for el in l2]
+
+    dist = ceolin_jaccard(l1, l2)
+    return 1 if dist == 0 else dist
 
 
 def serialize(df, file_obj):
@@ -172,7 +185,7 @@ def reflective_docs(docstring, file_path, sep="Usage:"):
         "andrea.serafini",
         "federico.motta",
         "lorenzo.carletti",
-        "matteo.vanzini"
+        "matteo.vanzini",
     ):
         assert f"{author}@unimore.it" in gpl_license, str(
             f"Please add {author}@unimore.it to {file_path} copyright notice"
