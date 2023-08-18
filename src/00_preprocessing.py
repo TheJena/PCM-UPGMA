@@ -37,9 +37,11 @@ from utility import (
     initialize_logging,
     MISSING_VALUES,
     serialize,
+    jaccard,
 )
 import numpy as np
 import pandas as pd
+from sklearn.impute import KNNImputer
 
 parser = get_cli_parser(__doc__, __file__)
 
@@ -298,16 +300,31 @@ df = df.replace({tv: True for tv in excel_kwargs["true_values"]}).replace(
 )
 
 if parsed_args.pivot_axis in ("record", "row"):
-    debug("Transposing dataset because of {parsed_args.pivot_axis=}")
+    debug(f"Transposing dataset because of {parsed_args.pivot_axis=}")
     df = df.transpose()
 
 if parsed_args.drop_nan:
     debug("Dropping columns/features with missing data")
     df = df.dropna(axis=1)
-elif parsed_args.n_neighbors > 1:
-    raise NotImplementedError("Paging Andrea :D")
+elif parsed_args.n_neighbors > 0:
+    df = df.rename(columns=str)
+
+    # keep_empty_features=True => if a feature is full NaN, it is set to False
+    # metric can also be set to "nan_euclidean"
+    imputer = KNNImputer(
+        n_neighbors=parsed_args.n_neighbors,
+        weights="distance",
+        metric=jaccard,
+        keep_empty_features=True,
+    )
+    imputed_array = imputer.fit_transform(df)
+
+    df = pd.DataFrame(imputed_array, columns=df.columns, index=df.index).ge(
+        0.5
+    )
+
 else:
-    parser.error("The number of neighbors must be > 1")
+    parser.error("The number of neighbors must be > 0")
 
 debug(f"final dataframe\n{df.to_string()}\n\n{df.shape=}")
 
