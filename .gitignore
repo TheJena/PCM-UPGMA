@@ -9,3 +9,5 @@ src/script_jaccard.py
 *.toml
 *.xlsx
 *.xlsx#
+*__pycache__*
+env/
