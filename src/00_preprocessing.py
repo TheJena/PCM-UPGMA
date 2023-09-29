@@ -334,6 +334,9 @@ if set(df.values.flatten()) != {True, False}:
         + repr(sorted(set(df.values.flatten()) - {True, False}, key=str))[1:-1]
         + "."
     )
+
+df = df.rename(index={"PCM" : "PCa", "TE" : "Ter"})
+
 try:
     serialize(df, parsed_args.output)
 except Exception as e:

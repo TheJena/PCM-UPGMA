@@ -5,3 +5,5 @@ openpyxl
 pandas
 scikit-learn
 scipy
+geopandas
+contextily
