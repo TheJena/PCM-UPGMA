@@ -76,6 +76,7 @@ df.columns = [
 lat = df.Latitude
 long = df.Longitude
 geometry = [Point(xy) for xy in zip(long, lat)]
+is_last_clusterless = False
 
 clusters = list()
 with open(parsed_args.input_file, "r") as f:
@@ -83,13 +84,16 @@ with open(parsed_args.input_file, "r") as f:
         line = line.strip()
         if len(line) <= 0:
             continue
+        if line == "C:":
+            is_last_clusterless = True
+            continue
 
         line = line.split(" ")
         clusters.append(line)
 
 colors = colormaps.get_cmap("jet")
 
-markers = ["o", "^", "s", "*", "+", "x", "D"]
+markers = ["o", "^", "s", "*", "+", "x", "D", "v", "<", ">"]
 markers = markers[: len(clusters) + 1]
 
 italy = gpd.read_file("src/italy/ITA_adm3.shp")
@@ -115,6 +119,12 @@ for i, cluster in enumerate(clusters):
         geo_df.loc[
             geo_df.lat.eq(lat) & geo_df.long.eq(long), "values"
         ] = i / len(clusters)
+        chosen_label = str(i)
+        if i >= (len(clusters) - 1) and is_last_clusterless:
+            chosen_label = "No Cluster"
+        geo_df.loc[
+            geo_df.lat.eq(lat) & geo_df.long.eq(long), "label"
+        ] = chosen_label
 
 italy.crs = {"init": "epsg:4326"}
 geo_df.crs = {"init": "epsg:4326"}
@@ -124,13 +134,13 @@ ax = gpd.GeoSeries(
     italy.to_crs(epsg=4326)["geometry"].unary_union
 ).boundary.plot(ax=ax, alpha=0.5, color="#0767ba", zorder=2, lw=0.5)
 
-by = ["marker", "values"]
+by = ["values", "marker", "label"]
 
 for i, (idx, _df) in enumerate(geo_df.groupby(by, as_index=True)):
     plot_kwargs = dict(zip(by, idx))
     plot_kwargs["color"] = colors(plot_kwargs.pop("values"))
 
-    ax = _df.plot(ax=ax, markersize=50, zorder=3, label=i, **plot_kwargs)
+    ax = _df.plot(ax=ax, markersize=50, zorder=3, **plot_kwargs)
 
 plt.legend(loc="upper right")
 plt.show()

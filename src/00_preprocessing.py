@@ -136,8 +136,8 @@ assert parsed_args.sheet in sheets | set(
 
 excel_kwargs = dict(
     sheet_name=parsed_args.sheet,
-    true_values=["+", "Yes", "yes"],
-    false_values=["-", "No", "no"],
+    true_values=["+", "Yes", "yes", " +"],
+    false_values=["-", "No", "no", " -"],
     na_values=MISSING_VALUES,
 )
 df = pd.read_excel(parsed_args.input, **excel_kwargs)
