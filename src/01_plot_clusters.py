@@ -43,6 +43,7 @@ import os
 
 DPI         = 80
 PLT_TITLE   = "Hierarchical Clustering Dendrogram\n(UPGMA method)"
+CHOSEN_DISTANCE = "hamming"
 
 # -- END MACRO --
 
@@ -136,7 +137,7 @@ def read_and_make_dendrogram(
 
     model = AgglomerativeClustering(
         linkage="average",
-        metric="euclidean",
+        metric=CHOSEN_DISTANCE,
         distance_threshold=0,
         n_clusters=None,
     )
@@ -157,7 +158,7 @@ def read_and_make_dendrogram(
         distances[language] = distance.cdist(
             df.values,
             np.array([df.loc[language]]),
-            metric="euclidean",
+            metric=CHOSEN_DISTANCE,
         )
 
     return [distances, dendrogram]
@@ -234,10 +235,49 @@ for key in result_last.keys():
         out_string += (el + " ")
     out_string += "\n"
 
-if parsed_args.print_clusterless:
+if parsed_args.print_clusterless and len(clusterless_list) > 0:
+    out_string += "C:\n"
     for el in clusterless_list:
         out_string += el + " "
     out_string += "\n"
 
 with open(parsed_args.output_directory + "/clusters.txt", "w") as f:
     f.write(out_string)
+
+for k in range(num_plots):
+    clusters = {l : [] for l in languages}
+    no_groups_index = "C0"
+    for source_dialect in languages:
+        for dest_dialect in languages:
+            source_color = groupings[k][source_dialect]
+            dest_color = groupings[k][dest_dialect]
+            if (source_color != no_groups_index) and (
+                source_color == dest_color
+            ):
+                clusters[source_dialect] += [dest_dialect]
+
+    clusterless_list = list()
+
+    result_last = dict()
+    for language in languages:
+        sorted_list = sorted(set(clusters[language]))
+        if len(sorted_list) > 0:
+            el = sorted_list[0]
+            result_last[sorted_list[0]] = sorted_list
+        else:
+            clusterless_list += [language]
+
+    out_string = ""
+    for key in result_last.keys():
+        for el in result_last[key]:
+            out_string += (el + " ")
+        out_string += "\n"
+
+    if parsed_args.print_clusterless and len(clusterless_list) > 0:
+        out_string += "C:\n"
+        for el in clusterless_list:
+            out_string += el + " "
+        out_string += "\n"
+
+    with open(parsed_args.output_directory + "/clusters_" + str(k) + ".txt", "w") as f:
+        f.write(out_string)

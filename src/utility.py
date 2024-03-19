@@ -56,7 +56,7 @@ ALLOWED_EXTENSIONS = defaultdict(
         xlsx="to_excel",
     ),
 )
-MISSING_VALUES = ("?", "0", "-/+", "+/-")
+MISSING_VALUES = ("?", "0", "-/+", "+/-", "0+")
 
 
 class HelpFormatter(
