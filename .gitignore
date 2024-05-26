@@ -2,6 +2,8 @@
 .venv
 settings.sh
 src/script_jaccard.py
+out_plot/
+out_preprocess/
 *.jpeg
 *.jpg
 *.png

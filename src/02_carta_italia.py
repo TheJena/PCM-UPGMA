@@ -79,9 +79,15 @@ geometry = [Point(xy) for xy in zip(long, lat)]
 is_last_clusterless = False
 
 clusters = list()
+num_line = 0
+title = ""
 with open(parsed_args.input_file, "r") as f:
     for line in f:
         line = line.strip()
+        num_line += 1
+        if num_line == 1:
+            title = line
+            continue
         if len(line) <= 0:
             continue
         if line == "C:":
@@ -143,4 +149,5 @@ for i, (idx, _df) in enumerate(geo_df.groupby(by, as_index=True)):
     ax = _df.plot(ax=ax, markersize=50, zorder=3, **plot_kwargs)
 
 plt.legend(loc="upper right")
+plt.title(title)
 plt.show()

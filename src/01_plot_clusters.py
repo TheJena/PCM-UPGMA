@@ -163,6 +163,43 @@ def read_and_make_dendrogram(
 
     return [distances, dendrogram]
 
+def are_same_cluster(source_dialect, dest_dialect, groupings, k, no_groups_index):
+    try:
+        source_color = groupings[k][source_dialect]
+        dest_color = groupings[k][dest_dialect]
+        return (source_color != no_groups_index) and (source_color == dest_color)
+    except:
+        pass
+    return False
+
+def create_clusters(clusters_dict, all_languages, valid_languages): 
+    clusterless_list = list()
+    result_last = dict()
+    for language in all_languages:
+        if language not in valid_languages:
+            continue
+        sorted_list = sorted(set(clusters_dict[language]))
+        if len(sorted_list) > 1:
+            el = sorted_list[0]
+            result_last[sorted_list[0]] = sorted_list
+        else:
+            clusterless_list += [language]
+    return clusterless_list, result_last
+
+def get_output_clusters(clusters_dict, parsed_args, all_languages, valid_languages):
+    clusterless_list, result_last = create_clusters(clusters_dict, all_languages, valid_languages)
+    out_string = ""
+    for key in result_last.keys():
+        for el in result_last[key]:
+            out_string += (el + " ")
+        out_string += "\n"
+
+    if parsed_args.print_clusterless and len(clusterless_list) > 0:
+        out_string += "C:\n"
+        for el in clusterless_list:
+            out_string += el + " "
+        out_string += "\n"
+    return out_string
 
 input_file_list = os.listdir(parsed_args.input_directory)
 num_plots = len(input_file_list)
@@ -188,7 +225,20 @@ for i in range(num_plots):
         
 total_num_matches = dict()
 
-languages = sorted(list(groupings[0].keys()))
+reported = set()
+languages = list(groupings[0].keys())
+for i in range(1, num_plots):
+    languages_own = list()
+    for l in groupings[i].keys():
+        if l not in languages and l not in reported:
+            print(l + " not in all tables!")
+            languages += [l]
+            reported.add(l)
+    for l in languages:
+        if l not in groupings[i].keys() and l not in reported:
+            print(l + " not in all tables!")
+            reported.add(l)
+languages = sorted(languages)
 clusters = [
     {l : [] for l in languages}
     for _ in range(num_plots + 1)
@@ -200,11 +250,7 @@ for source_dialect in languages:
     for dest_dialect in languages:
         num_single_matches = 0
         for k in range(num_plots):
-            source_color = groupings[k][source_dialect]
-            dest_color = groupings[k][dest_dialect]
-            if (source_color != no_groups_index) and (
-                source_color == dest_color
-            ):
+            if are_same_cluster(source_dialect, dest_dialect, groupings, k, no_groups_index):
                 num_single_matches += 1
         num_matches += [num_single_matches]
         clusters[num_single_matches][source_dialect] += [dest_dialect]
@@ -218,66 +264,19 @@ final_result.to_excel(
     parsed_args.output_directory + "/plot_clusters_result.xlsx"
 )
 
-clusterless_list = list()
-
-result_last = dict()
-for language in languages:
-    sorted_list = sorted(set(clusters[num_plots][language]))
-    if len(sorted_list) > 0:
-        el = sorted_list[0]
-        result_last[sorted_list[0]] = sorted_list
-    else:
-        clusterless_list += [language]
-
-out_string = ""
-for key in result_last.keys():
-    for el in result_last[key]:
-        out_string += (el + " ")
-    out_string += "\n"
-
-if parsed_args.print_clusterless and len(clusterless_list) > 0:
-    out_string += "C:\n"
-    for el in clusterless_list:
-        out_string += el + " "
-    out_string += "\n"
+out_string = get_output_clusters(clusters[num_plots], parsed_args, languages, languages)
 
 with open(parsed_args.output_directory + "/clusters.txt", "w") as f:
-    f.write(out_string)
+    f.write("4 Tables Fused\n" + out_string)
 
 for k in range(num_plots):
     clusters = {l : [] for l in languages}
-    no_groups_index = "C0"
     for source_dialect in languages:
         for dest_dialect in languages:
-            source_color = groupings[k][source_dialect]
-            dest_color = groupings[k][dest_dialect]
-            if (source_color != no_groups_index) and (
-                source_color == dest_color
-            ):
+            if are_same_cluster(source_dialect, dest_dialect, groupings, k, no_groups_index):
                 clusters[source_dialect] += [dest_dialect]
 
-    clusterless_list = list()
-
-    result_last = dict()
-    for language in languages:
-        sorted_list = sorted(set(clusters[language]))
-        if len(sorted_list) > 0:
-            el = sorted_list[0]
-            result_last[sorted_list[0]] = sorted_list
-        else:
-            clusterless_list += [language]
-
-    out_string = ""
-    for key in result_last.keys():
-        for el in result_last[key]:
-            out_string += (el + " ")
-        out_string += "\n"
-
-    if parsed_args.print_clusterless and len(clusterless_list) > 0:
-        out_string += "C:\n"
-        for el in clusterless_list:
-            out_string += el + " "
-        out_string += "\n"
+    out_string = get_output_clusters(clusters, parsed_args, languages, groupings[i].keys())
 
     with open(parsed_args.output_directory + "/clusters_" + str(k) + ".txt", "w") as f:
-        f.write(out_string)
+        f.write(input_file_list[k].replace(".xlsx", "").replace("_", " ") + "\n" + out_string)
