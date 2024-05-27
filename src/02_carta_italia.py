@@ -33,12 +33,18 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import sys
+import os
 import geopandas as gpd
 import contextily as ctx
 from shapely.geometry import Point
 from matplotlib import colormaps
 from utility import get_cli_parser
 
+# ---- MACRO ----
+
+DPI         = 300
+
+# -- END MACRO --
 
 # ---- START ARGDEF ----
 
@@ -49,6 +55,16 @@ parser.add_argument(
     "--input_file",
     default="./clusters.txt",
     help="File containing clusters given by 01_plot_clusters.py",
+    metavar="str",
+    required=True,
+    type=str,
+)
+
+parser.add_argument(
+    "-o",
+    "--output_dir",
+    default=".",
+    help="Directory where to put the resulting plots",
     metavar="str",
     required=True,
     type=str,
@@ -150,4 +166,5 @@ for i, (idx, _df) in enumerate(geo_df.groupby(by, as_index=True)):
 
 plt.legend(loc="upper right")
 plt.title(title)
+#plt.savefig(os.path.join(parsed_args.output_dir, title.replace(" ", "_") + "_italy_map.png"), dpi=DPI)
 plt.show()

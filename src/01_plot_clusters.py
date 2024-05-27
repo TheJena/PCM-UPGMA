@@ -92,6 +92,7 @@ def plot_dendrogram(
     plot_title,
     plot_x_label,
     out_file_name,
+    color_threshold_multiplier,
     **kwargs
 ):
     """Create linkage matrix and then plot the dendrogram"""
@@ -116,7 +117,11 @@ def plot_dendrogram(
     plt.title(plot_title)
     plt.xlabel(plot_x_label)
     
-    out_dendogram = dendrogram(linkage_matrix, **kwargs)
+    if color_threshold_multiplier is None:
+        color_threshold = None
+    else:
+        color_threshold = color_threshold_multiplier * max(linkage_matrix[:,2])
+    out_dendogram = dendrogram(linkage_matrix, color_threshold=color_threshold, **kwargs)
 
     plt.savefig(out_file_name, dpi=DPI)
 
@@ -150,6 +155,7 @@ def read_and_make_dendrogram(
         plot_title,
         plot_x_label,
         out_file_name,
+        0.65,
         labels=languages
     )
 
@@ -241,8 +247,8 @@ for i in range(1, num_plots):
 languages = sorted(languages)
 shared_languages = []
 for l in languages:
-	if l not in reported:
-		shared_languages += [l]
+    if l not in reported:
+        shared_languages += [l]
 shared_languages = sorted(shared_languages)
 clusters = [
     {l : [] for l in languages}
