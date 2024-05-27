@@ -41,7 +41,7 @@ import os
 
 # ---- MACRO ----
 
-DPI         = 80
+DPI         = 300
 PLT_TITLE   = "Hierarchical Clustering Dendrogram\n(UPGMA method)"
 CHOSEN_DISTANCE = "hamming"
 
@@ -213,7 +213,7 @@ for i in range(num_plots):
             parsed_args.output_directory + "/" + 
                 input_file_list[i].replace(".xlsx", ".png"),
             PLT_TITLE,
-            input_file_list[i].rstrip(".xlsx"),
+            input_file_list[i].rstrip(".xlsx").replace("_", " "),
         )
     ]
 
@@ -239,6 +239,11 @@ for i in range(1, num_plots):
             print(l + " not in all tables!")
             reported.add(l)
 languages = sorted(languages)
+shared_languages = []
+for l in languages:
+	if l not in reported:
+		shared_languages += [l]
+shared_languages = sorted(shared_languages)
 clusters = [
     {l : [] for l in languages}
     for _ in range(num_plots + 1)
@@ -264,10 +269,10 @@ final_result.to_excel(
     parsed_args.output_directory + "/plot_clusters_result.xlsx"
 )
 
-out_string = get_output_clusters(clusters[num_plots], parsed_args, languages, languages)
+out_string = get_output_clusters(clusters[num_plots], parsed_args, languages, shared_languages)
 
 with open(parsed_args.output_directory + "/clusters.txt", "w") as f:
-    f.write("4 Tables Fused\n" + out_string)
+    f.write(str(num_plots) + " Tables Fused\n" + out_string)
 
 for k in range(num_plots):
     clusters = {l : [] for l in languages}
@@ -276,7 +281,7 @@ for k in range(num_plots):
             if are_same_cluster(source_dialect, dest_dialect, groupings, k, no_groups_index):
                 clusters[source_dialect] += [dest_dialect]
 
-    out_string = get_output_clusters(clusters, parsed_args, languages, groupings[i].keys())
+    out_string = get_output_clusters(clusters, parsed_args, languages, groupings[k].keys())
 
     with open(parsed_args.output_directory + "/clusters_" + str(k) + ".txt", "w") as f:
-        f.write(input_file_list[k].replace(".xlsx", "").replace("_", " ") + "\n" + out_string)
+        f.write(input_file_list[k].rstrip(".xlsx").replace("_", " ") + "\n" + out_string)
