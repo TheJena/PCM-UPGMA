@@ -41,10 +41,11 @@ from logging import (
 )
 from os import remove
 from os.path import realpath
+from sklearn.metrics import pairwise_distances
 from tempfile import NamedTemporaryFile
 import numpy as np
 from script_jaccard import jaccard as ceolin_jaccard
-import pandas as pd
+
 
 ALLOWED_EXTENSIONS = defaultdict(
     lambda: "to_pickle",
@@ -57,6 +58,12 @@ ALLOWED_EXTENSIONS = defaultdict(
     ),
 )
 MISSING_VALUES = ("?", "0", "-/+", "+/-", "0+")
+INCH_TO_MILLIMETERS = 25.4
+A4_LANDSCAPE_PAGE_SIZE_INCHES = tuple(
+    map(lambda mm: round(mm / INCH_TO_MILLIMETERS, 6), (297, 210))
+)  # sqrt(2) aspect ratio
+
+A4_PORTRAIT_PAGE_SIZE_INCHES = tuple(reversed(A4_LANDSCAPE_PAGE_SIZE_INCHES))
 
 
 class HelpFormatter(
@@ -68,13 +75,18 @@ class HelpFormatter(
 
 def jaccard(l1, l2, *args, **kwargs):
     """
-    Returns (1 / ceolin_jaccard) because ceolin's jaccard function returns distance instead of similarity
+    Returns (1 / ceolin_jaccard) because ceolin's jaccard function
+    returns distance instead of similarity
     """
     l1 = ["+" if el > 0 else "-" for el in l1]
     l2 = ["+" if el > 0 else "-" for el in l2]
 
     dist = ceolin_jaccard(l1, l2)
     return 1 if dist == 0 else dist
+
+
+def hamming(l1, l2, *args, **kwargs):
+    return pairwise_distances([l1], [l2], metric="hamming")
 
 
 def serialize(df, file_obj):

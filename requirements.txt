@@ -1,9 +1,9 @@
 black
+contextily
+geopandas
 matplotlib
 numpy
 openpyxl
 pandas
 scikit-learn
 scipy
-geopandas
-contextily
