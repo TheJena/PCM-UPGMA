@@ -27,29 +27,21 @@
    simple agglomerative (bottom-up) hierarchical clustering method
 
    Usage:
-        mkdir -p out_plot && python3 src/01_plot_clusters.py -i out_preprocess -o out_plot | grep -i record | grep -o '\[.*\]' | sort -V |uniq -c
+        mkdir -p out_plot && python3 src/01_plot_clusters.py -i out_preprocess -o out_plot | grep -i record | grep -o '\\[.*\\]' | sort -V |uniq -c
 """
 
+from matplotlib import colormaps
+from shapely.geometry import Point
+from utility import get_cli_parser, A4_PORTRAIT_PAGE_SIZE_INCHES
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
-import sys
-import os
-import geopandas as gpd
-import contextily as ctx
-from shapely.geometry import Point
-from matplotlib import colormaps
-from utility import get_cli_parser
 
-# ---- MACRO ----
 
-DPI         = 300
+DPI = 300
 
-# -- END MACRO --
-
-# ---- START ARGDEF ----
 
 parser = get_cli_parser(__doc__, __file__)
-
 parser.add_argument(
     "-i",
     "--input_file",
@@ -59,7 +51,6 @@ parser.add_argument(
     required=True,
     type=str,
 )
-
 parser.add_argument(
     "-o",
     "--output_dir",
@@ -69,14 +60,17 @@ parser.add_argument(
     required=True,
     type=str,
 )
+parser.add_argument(
+    "-v",
+    "--verbose",
+    action="count",
+    default=0,
+    dest="verbosity",
+)
 
 parsed_args = parser.parse_args()
 
-# ----- END ARGDEF -----
-
-df = pd.read_excel(
-    "datasets/99_dialects_lat_long_geolocation_clean.xlsx"
-)
+df = pd.read_excel("datasets/99_dialects_lat_long_geolocation_clean.xlsx")
 
 df.columns = [
     "Language",
@@ -89,22 +83,19 @@ df.columns = [
     "Longitude",
 ]
 
-lat = df.Latitude
-long = df.Longitude
-geometry = [Point(xy) for xy in zip(long, lat)]
-is_last_clusterless = False
+lat, lon = df.Latitude, df.Longitude
+geometry = [Point(xy) for xy in zip(lon, lat)]
 
 clusters = list()
-num_line = 0
+is_last_clusterless = False
 title = ""
 with open(parsed_args.input_file, "r") as f:
-    for line in f:
+    for i, line in enumerate(f):
         line = line.strip()
-        num_line += 1
-        if num_line == 1:
+        if i == 0:
             title = line
             continue
-        if len(line) <= 0:
+        if not line:
             continue
         if line == "C:":
             is_last_clusterless = True
@@ -114,7 +105,6 @@ with open(parsed_args.input_file, "r") as f:
         clusters.append(line)
 
 colors = colormaps.get_cmap("jet")
-
 markers = ["o", "^", "s", "*", "+", "x", "D", "v", "<", ">"]
 markers = markers[: len(clusters) + 1]
 
@@ -124,7 +114,7 @@ italy = gpd.read_file("src/italy/ITA_adm3.shp")
 geo_df = gpd.GeoDataFrame(geometry=geometry)
 geo_df = geo_df.assign(
     lat=lambda _df: _df["geometry"].apply(lambda pt: pt.y),
-    long=lambda _df: _df["geometry"].apply(lambda pt: pt.x),
+    lon=lambda _df: _df["geometry"].apply(lambda pt: pt.x),
     marker=[None for i in range(geo_df.shape[0])],
     values=[None for i in range(geo_df.shape[0])],
 )
@@ -132,20 +122,19 @@ geo_df = geo_df.assign(
 for i, cluster in enumerate(clusters):
     marker = markers[i]
 
-    for lat, long in df.loc[
+    for lat, lon in df.loc[
         df.Label.isin(cluster), ["Latitude", "Longitude"]
     ].itertuples(index=False):
-        geo_df.loc[
-            geo_df.lat.eq(lat) & geo_df.long.eq(long), "marker"
-        ] = marker
-        geo_df.loc[
-            geo_df.lat.eq(lat) & geo_df.long.eq(long), "values"
-        ] = i / len(clusters)
+        geo_df.loc[geo_df.lat.eq(lat) & geo_df.lon.eq(lon), "marker"] = marker
+        geo_df.loc[geo_df.lat.eq(lat) & geo_df.lon.eq(lon), "values"] = float(
+            i / len(clusters)
+        )
         chosen_label = str(i)
         if i >= (len(clusters) - 1) and is_last_clusterless:
             chosen_label = "No Cluster"
         geo_df.loc[
-            geo_df.lat.eq(lat) & geo_df.long.eq(long), "label"
+            geo_df.lat.eq(lat) & geo_df.lon.eq(lon),
+            "label",
         ] = chosen_label
 
 italy.crs = {"init": "epsg:4326"}
@@ -153,18 +142,20 @@ geo_df.crs = {"init": "epsg:4326"}
 
 ax = italy.plot(alpha=0.35, color="#3e9df0", zorder=1)
 ax = gpd.GeoSeries(
-    italy.to_crs(epsg=4326)["geometry"].unary_union
+    italy.to_crs(epsg=4326)["geometry"].unary_union,
 ).boundary.plot(ax=ax, alpha=0.5, color="#0767ba", zorder=2, lw=0.5)
 
 by = ["values", "marker", "label"]
-
 for i, (idx, _df) in enumerate(geo_df.groupby(by, as_index=True)):
     plot_kwargs = dict(zip(by, idx))
     plot_kwargs["color"] = colors(plot_kwargs.pop("values"))
-
     ax = _df.plot(ax=ax, markersize=50, zorder=3, **plot_kwargs)
 
 plt.legend(loc="upper right")
 plt.title(title)
-#plt.savefig(os.path.join(parsed_args.output_dir, title.replace(" ", "_") + "_italy_map.png"), dpi=DPI)
+fig = plt.gcf()
+fig.set_size_inches(A4_PORTRAIT_PAGE_SIZE_INCHES)
+fig.tight_layout()  # hai modificato FrM e la lat lon di taranto nel
+# 99_clean.xlsx
+fig.savefig(parsed_args.input_file.replace(".txt", "__mappa.svg"), dpi=600)
 plt.show()

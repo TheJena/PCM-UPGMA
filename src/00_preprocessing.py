@@ -37,7 +37,7 @@ from utility import (
     initialize_logging,
     MISSING_VALUES,
     serialize,
-    jaccard,
+    jaccard as hamming,
 )
 import numpy as np
 import pandas as pd
@@ -138,7 +138,7 @@ excel_kwargs = dict(
     sheet_name=parsed_args.sheet,
     true_values=["+", "Yes", "yes", " +"],
     false_values=["-", "No", "no", " -"],
-    na_values=MISSING_VALUES,
+    na_values=set(MISSING_VALUES).difference({"+/-", "-/+"}),
 )
 df = pd.read_excel(parsed_args.input, **excel_kwargs)
 debug(
@@ -273,15 +273,17 @@ df = (
     .assign(
         sort_by=lambda _df: pd.Series(
             [
-                str(
-                    int(
-                        _df.loc[i, "index"]
-                        .split("=")[0]
-                        .strip(ascii_letters + punctuation)
-                    )
-                ).rjust(2, "0")
-                if "=" in str(_df.loc[i, "index"])
-                else str("0" if flag else "")
+                (
+                    str(
+                        int(
+                            _df.loc[i, "index"]
+                            .split("=")[0]
+                            .strip(ascii_letters + punctuation)
+                        )
+                    ).rjust(2, "0")
+                    if "=" in str(_df.loc[i, "index"])
+                    else str("0" if flag else "")
+                )
                 for i, flag in _df["index"].astype(str).str.len().eq(1).items()
             ],
             dtype="string",
@@ -299,6 +301,12 @@ df = df.replace({tv: True for tv in excel_kwargs["true_values"]}).replace(
     {fv: False for fv in excel_kwargs["false_values"]}
 )
 
+
+# we chose with Andrea Sgarro that +/- and -/+ were treatable as 0.5
+# in a fuzzy way
+df = df.replace({"+/-": 0.5, "-/+": 0.5})
+
+
 if parsed_args.pivot_axis in ("record", "row"):
     debug(f"Transposing dataset because of {parsed_args.pivot_axis=}")
     df = df.transpose()
@@ -314,14 +322,20 @@ elif parsed_args.n_neighbors > 0:
     imputer = KNNImputer(
         n_neighbors=parsed_args.n_neighbors,
         weights="distance",
-        metric=jaccard,
+        metric=hamming,
         keep_empty_features=True,
     )
     imputed_array = imputer.fit_transform(df)
 
-    df = pd.DataFrame(imputed_array, columns=df.columns, index=df.index).ge(
-        0.5
-    )
+    if "1970" in parsed_args.input.name:
+        df = pd.DataFrame(
+            imputed_array, columns=df.columns, index=df.index
+        ).astype("float")
+    else:
+        df = pd.DataFrame(
+            imputed_array, columns=df.columns, index=df.index
+        ).ge(0.5)
+
 
 else:
     parser.error("The number of neighbors must be > 0")
@@ -335,7 +349,7 @@ if set(df.values.flatten()) != {True, False}:
         + "."
     )
 
-df = df.rename(index={"PCM" : "PCa", "TE" : "Ter"})
+df = df.rename(index={"PCM": "PCa", "TE": "Ter"})
 
 try:
     serialize(df, parsed_args.output)

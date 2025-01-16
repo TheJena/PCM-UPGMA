@@ -1,25 +1,32 @@
-.PHONY: black clean decrypt decrypt-all encrypt encrypt-all encrypt-pdf
+.PHONY: black-inplace black-view clean decrypt decrypt-all encrypt encrypt-all encrypt-pdf
 
 SHELL := /bin/bash
 SECRET ?= "Something I personally told you"
 
 # Lets not argue about code style :D
 # https://github.com/psf/black#the-uncompromising-code-formatter
-black:
+black-inplace:
 	@clear					\
 	&& find . -iname "*.py" -print0 	\
 	| xargs -0 -I @ -P $(shell nproc)	\
-		black	--color			\
+		black   --color			\
+			--line-length 79	\
+			--target-version py312	\
+			@
+
+black-view:
+	@clear					\
+	&& find . -iname "*.py" -print0 	\
+	| xargs -0 -I @ -P $(shell nproc)	\
+		black   --color			\
 			--diff			\
 			--line-length 79	\
-			--target-version py311	\
+			--target-version py312	\
 			@
-	@echo
-	@echo "Remove '--diff' to apply changes in place before committing!"
-	@echo
 
 clean:
 	@find . -iname "*.pyc"       -exec rm -v  {} \;
+	@find . -iname ".DS_Store"   -exec rm -v  {} \;
 	@find . -iname "__pycache__" -empty -delete
 	@find . -iname "*.gpg" -print0				\
 	| while IFS= read -r -d '' f; do			\

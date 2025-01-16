@@ -27,73 +27,87 @@
    simple agglomerative (bottom-up) hierarchical clustering method
 
    Usage:
-        mkdir -p out_plot && python3 src/01_plot_clusters.py -i out_preprocess -o out_plot | grep -i record | grep -o '\[.*\]' | sort -V |uniq -c
+        mkdir -p out_plot && python3 src/01_plot_clusters.py -i out_preprocess -o out_plot | grep -i record | grep -o '\\[.*\\]' | sort -V |uniq -c
 """
 import numpy as np
 import pandas as pd
 
+# from matplotlib import colormaps
+# from matplotlib import colors
+from logging import debug  # , info, warning, critical
 from matplotlib import pyplot as plt
+from os.path import basename, join as join_path
 from scipy.spatial import distance
 from scipy.cluster.hierarchy import dendrogram
 from sklearn.cluster import AgglomerativeClustering
-from utility import get_cli_parser
+from utility import get_cli_parser, initialize_logging
 import os
 
-# ---- MACRO ----
 
-DPI         = 300
-PLT_TITLE   = "Hierarchical Clustering Dendrogram\n(UPGMA method)"
+DPI = 300
+PLT_TITLE = "Hierarchical Clustering Dendrogram\n(UPGMA method)"
 CHOSEN_DISTANCE = "hamming"
 
-# -- END MACRO --
+
+def are_same_cluster(
+    source_dialect,
+    dest_dialect,
+    groupings,
+    k,
+    no_groups_index,
+):
+    try:
+        src_color = groupings[k][source_dialect]
+        dst_color = groupings[k][dest_dialect]
+        return (src_color != no_groups_index) and (src_color == dst_color)
+    except Exception as e:
+        debug(f"TODO: check what kind of exception this can be...\n{e!s}")
+    return False
 
 
-# ---- START ARGDEF ----
-
-parser = get_cli_parser(__doc__, __file__)
-
-parser.add_argument(
-    "-i",
-    "--input_directory",
-    default="./out_preprocess",
-    help="Directory containing preprocessed (with 00_preprocess) files",
-    metavar="str",
-    required=True,
-    type=str,
-)
-
-parser.add_argument(
-    "-o",
-    "--output_directory",
-    default="./out_plot",
-    help="Directory that will contain results ()",
-    metavar="str",
-    required=True,
-    type=str,
-)
-
-parser.add_argument(
-    "-p",
-    "--print_clusterless",
-    default=False,
-    help="Print clusterless dialects",
-    action="store_true",
-)
-
-parsed_args = parser.parse_args()
-
-# ----- END ARGDEF -----
+def create_clusters(clusters_dict, all_languages, valid_languages):
+    clusterless_list = list()
+    result_last = dict()
+    for language in sorted(
+        set(all_languages) & set(valid_languages),
+        key=str.lower,
+    ):
+        sorted_list = sorted(set(clusters_dict[language]))
+        if len(sorted_list) > 1:
+            result_last[sorted_list[0]] = sorted_list
+        else:
+            clusterless_list += [language]
+    return clusterless_list, result_last
 
 
-# ----- START SCRIPT -----
+def get_output_clusters(
+    clusters_dict,
+    parsed_args,
+    all_languages,
+    valid_languages,
+):
+    clusterless_list, result_last = create_clusters(
+        clusters_dict, all_languages, valid_languages
+    )
+    out_string = ""
+    for key in result_last.keys():
+        out_string += " ".join(result_last[key])
+        out_string += "\n"
+
+    if parsed_args.print_clusterless and len(clusterless_list) > 0:
+        out_string += "C:\n"
+        out_string += " ".join(clusterless_list)
+        out_string += "\n"
+    return out_string
+
 
 def plot_dendrogram(
-    model,                
+    model,
     plot_title,
     plot_x_label,
     out_file_name,
-    color_threshold_multiplier,
-    **kwargs
+    color_threshold_coeff,
+    **kwargs,
 ):
     """Create linkage matrix and then plot the dendrogram"""
 
@@ -116,15 +130,15 @@ def plot_dendrogram(
     plt.cla()
     plt.title(plot_title)
     plt.xlabel(plot_x_label)
-    
-    if color_threshold_multiplier is None:
-        color_threshold = None
-    else:
-        color_threshold = color_threshold_multiplier * max(linkage_matrix[:,2])
-    out_dendogram = dendrogram(linkage_matrix, color_threshold=color_threshold, **kwargs)
+
+    color_threshold = None
+    if color_threshold_coeff is not None:
+        color_threshold = color_threshold_coeff * max(linkage_matrix[:, 2])
+    out_dendogram = dendrogram(
+        linkage_matrix, color_threshold=color_threshold, **kwargs
+    )
 
     plt.savefig(out_file_name, dpi=DPI)
-
     return out_dendogram
 
 
@@ -156,7 +170,11 @@ def read_and_make_dendrogram(
         plot_x_label,
         out_file_name,
         0.65,
-        labels=languages
+        labels=languages,
+        # color_threshold=0.7,
+        # link_color_func=lambda k: colors.to_hex(
+        #     colormaps.get_cmap("jet")(hash(k))
+        # ),
     )
 
     distances = dict()
@@ -166,58 +184,64 @@ def read_and_make_dendrogram(
             np.array([df.loc[language]]),
             metric=CHOSEN_DISTANCE,
         )
-
     return [distances, dendrogram]
 
-def are_same_cluster(source_dialect, dest_dialect, groupings, k, no_groups_index):
-    try:
-        source_color = groupings[k][source_dialect]
-        dest_color = groupings[k][dest_dialect]
-        return (source_color != no_groups_index) and (source_color == dest_color)
-    except:
-        pass
-    return False
 
-def create_clusters(clusters_dict, all_languages, valid_languages): 
-    clusterless_list = list()
-    result_last = dict()
-    for language in all_languages:
-        if language not in valid_languages:
-            continue
-        sorted_list = sorted(set(clusters_dict[language]))
-        if len(sorted_list) > 1:
-            el = sorted_list[0]
-            result_last[sorted_list[0]] = sorted_list
-        else:
-            clusterless_list += [language]
-    return clusterless_list, result_last
+parser = get_cli_parser(__doc__, __file__)
+parser.add_argument(
+    "-i",
+    "--input_directory",
+    default="./out_preprocess",
+    help="Directory containing preprocessed (with 00_preprocess) files",
+    metavar="str",
+    required=True,
+    type=str,
+)
+parser.add_argument(
+    "-o",
+    "--output_directory",
+    default="./out_plot",
+    help="Directory that will contain results ()",
+    metavar="str",
+    required=True,
+    type=str,
+)
+parser.add_argument(
+    "-p",
+    "--print_clusterless",
+    default=False,
+    help="Print clusterless dialects",
+    action="store_true",
+)
+parser.add_argument(
+    "-v",
+    "--verbose",
+    action="count",
+    default=0,
+    dest="verbosity",
+)
 
-def get_output_clusters(clusters_dict, parsed_args, all_languages, valid_languages):
-    clusterless_list, result_last = create_clusters(clusters_dict, all_languages, valid_languages)
-    out_string = ""
-    for key in result_last.keys():
-        for el in result_last[key]:
-            out_string += (el + " ")
-        out_string += "\n"
+parsed_args = parser.parse_args()
 
-    if parsed_args.print_clusterless and len(clusterless_list) > 0:
-        out_string += "C:\n"
-        for el in clusterless_list:
-            out_string += el + " "
-        out_string += "\n"
-    return out_string
+initialize_logging(
+    basename(__file__).removesuffix(".py").rstrip("_") + "__debug.log",
+    parsed_args.verbosity,
+)
 
 input_file_list = os.listdir(parsed_args.input_directory)
 num_plots = len(input_file_list)
 
-results     = list()
-groupings   = list()
+
+results = list()
+groupings = list()
 for i in range(num_plots):
     results += [
         read_and_make_dendrogram(
-            parsed_args.input_directory + "/" + input_file_list[i],
-            parsed_args.output_directory + "/" + 
-                input_file_list[i].replace(".xlsx", ".png"),
+            join_path(parsed_args.input_directory, input_file_list[i]),
+            join_path(
+                parsed_args.output_directory,
+                input_file_list[i].replace(".xlsx", ".svg"),
+            ),
             PLT_TITLE,
             input_file_list[i].rstrip(".xlsx").replace("_", " "),
         )
@@ -228,40 +252,40 @@ for i in range(num_plots):
         color = results[i][1]["leaves_color_list"][j]
         dialect = results[i][1]["ivl"][j]
         groupings[i][dialect] = color
-        
-total_num_matches = dict()
+languages = list(groupings[0].keys())
 
 reported = set()
-languages = list(groupings[0].keys())
+total_num_matches = dict()
 for i in range(1, num_plots):
     languages_own = list()
-    for l in groupings[i].keys():
-        if l not in languages and l not in reported:
-            print(l + " not in all tables!")
-            languages += [l]
-            reported.add(l)
-    for l in languages:
-        if l not in groupings[i].keys() and l not in reported:
-            print(l + " not in all tables!")
-            reported.add(l)
-languages = sorted(languages)
-shared_languages = []
-for l in languages:
-    if l not in reported:
-        shared_languages += [l]
-shared_languages = sorted(shared_languages)
-clusters = [
-    {l : [] for l in languages}
-    for _ in range(num_plots + 1)
-]
+    for lang in sorted(
+        set(groupings[i].keys()) - set(languages) - set(reported),
+        key=str.lower,
+    ):
+        print(f"{lang:<8} not in all tables!")
+        languages.append(lang)
+        reported.add(lang)
+
+    for lang in sorted(
+        set(languages) - set(groupings[i].keys()) - set(reported),
+        key=str.lower,
+    ):
+        print(f"{lang:<8} not in all tables!")
+        reported.add(lang)
+
+languages = sorted(languages, key=str.lower)
+shared_languages = sorted(set(languages) - set(reported), key=str.lower)
+clusters = [{lang: list() for lang in languages} for _ in range(num_plots + 1)]
 
 no_groups_index = "C0"
 for source_dialect in languages:
-    num_matches = []
+    num_matches = list()
     for dest_dialect in languages:
         num_single_matches = 0
         for k in range(num_plots):
-            if are_same_cluster(source_dialect, dest_dialect, groupings, k, no_groups_index):
+            if are_same_cluster(
+                source_dialect, dest_dialect, groupings, k, no_groups_index
+            ):
                 num_single_matches += 1
         num_matches += [num_single_matches]
         clusters[num_single_matches][source_dialect] += [dest_dialect]
@@ -272,22 +296,38 @@ final_result = pd.DataFrame.from_dict(
 )
 
 final_result.to_excel(
-    parsed_args.output_directory + "/plot_clusters_result.xlsx"
+    join_path(parsed_args.output_directory, "plot_clusters_result.xlsx")
 )
 
-out_string = get_output_clusters(clusters[num_plots], parsed_args, languages, shared_languages)
+out_string = get_output_clusters(
+    clusters[num_plots], parsed_args, languages, shared_languages
+)
 
-with open(parsed_args.output_directory + "/clusters.txt", "w") as f:
-    f.write(str(num_plots) + " Tables Fused\n" + out_string)
+with open(join_path(parsed_args.output_directory, "clusters.txt"), "w") as f:
+    f.write(f"{num_plots!s} Tables Fused\n{out_string}")
 
 for k in range(num_plots):
-    clusters = {l : [] for l in languages}
+    clusters = {lang: list() for lang in languages}
     for source_dialect in languages:
         for dest_dialect in languages:
-            if are_same_cluster(source_dialect, dest_dialect, groupings, k, no_groups_index):
+            if are_same_cluster(
+                source_dialect, dest_dialect, groupings, k, no_groups_index
+            ):
                 clusters[source_dialect] += [dest_dialect]
 
-    out_string = get_output_clusters(clusters, parsed_args, languages, groupings[k].keys())
+    out_string = get_output_clusters(
+        clusters, parsed_args, languages, groupings[k].keys()
+    )
 
-    with open(parsed_args.output_directory + "/clusters_" + str(k) + ".txt", "w") as f:
-        f.write(input_file_list[k].rstrip(".xlsx").replace("_", " ") + "\n" + out_string)
+    with open(
+        join_path(parsed_args.output_directory, f"clusters_{k}.txt"),
+        "w",
+    ) as f:
+        f.write(
+            "\n".join(
+                (
+                    input_file_list[k].rstrip(".xlsx").replace("_", " "),
+                    out_string,
+                )
+            )
+        )

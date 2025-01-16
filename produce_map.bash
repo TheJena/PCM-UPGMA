@@ -12,15 +12,24 @@ mkdir ${PREPROCESSED_DIR}
 mkdir ${PLOT_DIR}
 
 # Preprocess all dataset with knn-imputer
-for file in ${INPUT_FILE_LIST};
-do
-	python3 ${SCRIPT_DIR}/00_preprocessing.py -i ${DATASET_DIR}"/"${file} -o ${PREPROCESSED_DIR}"/"${file} -k 5;
+for file in ${INPUT_FILE_LIST}; do
+	python3 ${SCRIPT_DIR}/00_preprocessing.py	\
+		-i ${DATASET_DIR}"/"${file}		\
+		-o ${PREPROCESSED_DIR}"/"${file}	\
+		-k 5;
 done
 
-python3 ${SCRIPT_DIR}/01_plot_clusters.py -i ${PREPROCESSED_DIR} -o ${PLOT_DIR} -p
-python3 ${SCRIPT_DIR}/02_carta_italia.py -i ${PLOT_DIR}/clusters.txt -o ${PLOT_DIR}
-#python3 ${SCRIPT_DIR}/02_carta_italia.py -i ${PLOT_DIR}/clusters_0.txt -o ${PLOT_DIR}
-#python3 ${SCRIPT_DIR}/02_carta_italia.py -i ${PLOT_DIR}/clusters_1.txt -o ${PLOT_DIR}
-#python3 ${SCRIPT_DIR}/02_carta_italia.py -i ${PLOT_DIR}/clusters_2.txt -o ${PLOT_DIR}
-#python3 ${SCRIPT_DIR}/02_carta_italia.py -i ${PLOT_DIR}/clusters_3.txt -o ${PLOT_DIR}
+python3 ${SCRIPT_DIR}/01_plot_clusters.py	\
+	-i ${PREPROCESSED_DIR}			\
+	-o ${PLOT_DIR}				\
+	-p
 
+python3 ${SCRIPT_DIR}/02_carta_italia.py	\
+	-i ${PLOT_DIR}/clusters.txt		\
+	-o ${PLOT_DIR}
+
+# for i in `seq 0 3`; do
+# 	python3 ${SCRIPT_DIR}/02_carta_italia.py	\
+# 		-i ${PLOT_DIR}/clusters_${i}.txt	\
+# 		-o ${PLOT_DIR}
+# done
