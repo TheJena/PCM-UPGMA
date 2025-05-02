@@ -21,13 +21,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-   Build a dendrogram by running UPGMA over some language parameters
+Build a dendrogram by running UPGMA over some language parameters
 
-   UPGMA (Unweighted Pair Group Method with Arithmetic mean) is a
-   simple agglomerative (bottom-up) hierarchical clustering method
+UPGMA (Unweighted Pair Group Method with Arithmetic mean) is a
+simple agglomerative (bottom-up) hierarchical clustering method
 
-   Usage:
-        mkdir -p out_plot && python3 src/01_plot_clusters.py -i out_preprocess -o out_plot | grep -i record | grep -o '\\[.*\\]' | sort -V |uniq -c
+Usage:
+     mkdir -p out_plot && python3 src/01_plot_clusters.py -i out_preprocess -o out_plot | grep -i record | grep -o '\\[.*\\]' | sort -V |uniq -c
 """
 import numpy as np
 import pandas as pd

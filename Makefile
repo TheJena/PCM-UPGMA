@@ -68,7 +68,7 @@ decrypt-all:
 	done
 
 encrypt:
-	@if ! test -f "$${FILE}"; then						\
+	@if test -z "$${FILE}"; then						\
 		echo -e "Usage:\n\tmake encrypt FILE=./foo/bar/path.ext";	\
 	elif echo "$${FILE}" | grep -qs "\.pdf$"; then				\
 		echo -e "Usage:\n\tmake encrypt-pdf FILE=./foo/bar/path.pdf";	\

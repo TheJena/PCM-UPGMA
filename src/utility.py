@@ -90,13 +90,14 @@ def hamming(l1, l2, *args, **kwargs):
 
 
 def serialize(df, file_obj):
+    debug(f"{file_obj.name=}")
     ext = file_obj.name.split(".")[-1]
     if ext not in list(ALLOWED_EXTENSIONS.keys()) + ["<stdout>"]:
         remove(file_obj.name)  # avoid creating empty files
         raise Exception(f"Unrecognized output file extension: {ext}")
     fun = getattr(df, ALLOWED_EXTENSIONS[ext])
 
-    assert file_obj.mode == "wb"
+    assert file_obj.mode == "wb", f"{file_obj.name=}, {file_obj.mode=}"
     if ext in ("csv", "txt"):
         with open(file_obj.name, "w") as f:
             fun(f)
@@ -193,15 +194,17 @@ def reflective_docs(docstring, file_path, sep="Usage:"):
         for line in open(realpath(file_path)).read().split("\n")
         if line.startswith("#")
     )
-    for author in (
-        "andrea.serafini",
-        "federico.motta",
-        "lorenzo.carletti",
-        "matteo.vanzini",
-    ):
-        assert f"{author}@unimore.it" in gpl_license, str(
-            f"Please add {author}@unimore.it to {file_path} copyright notice"
-        )
+    for year, authors in {
+        2025: ("federico.motta", "lorenzo.carletti"),
+        2024: ("federico.motta", "lorenzo.carletti"),
+        2023: ("andrea.serafini", "matteo.vanzini"),
+    }.items():
+        if str(year) in gpl_license:
+            for author in authors:
+                assert f"{author}@unimore.it" in gpl_license, str(
+                    f"Please add {author}@unimore.it "
+                    f"to {file_path} copyright notice"
+                )
     gpl_license = gpl_license.split("\n")[
         next(
             i

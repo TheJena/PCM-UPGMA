@@ -5,8 +5,6 @@
 #
 # Copyright (C) 2025 Federico Motta    <federico.motta@unimore.it>
 #                    Lorenzo  Carletti <lorenzo.carletti@unimore.it>
-#                    Matteo   Vanzini  <matteo.vanzini@unimore.it>
-#                    Andrea   Serafini <andrea.serafini@unimore.it>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,8 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-   Usage:
-            coming soon...
+Usage:
+         coming soon...
 """
 
 from argparse import FileType
@@ -46,10 +44,9 @@ parser.add_argument(
     "-s",
     "--rules-sheet",
     default="rules",
-    help="Sheet number or name to read from --input-rules file",
+    help="Sheet name to read from --input-rules file",
     metavar="str",
 )
-
 parser.add_argument(
     "-p",
     "--implied-parameter",
@@ -231,7 +228,7 @@ for lang in sorted(df.columns, key=str.lower):
         original_formula = str(formula)
         for k, v in lang_dict.items():
             formula = formula.replace(k, repr(v))
-        formula_result = eval(formula) if formula else True
+        formula_result = (formula == "") or eval(formula)
 
         if not formula_result and param_value_in_lang in ("0",):
             continue  # implication verified

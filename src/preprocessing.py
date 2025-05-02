@@ -3,7 +3,10 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (C) 2023 Federico Motta    <federico.motta@unimore.it>
+# Copyright (C) 2024 Federico Motta    <federico.motta@unimore.it>
+#                    Lorenzo  Carletti <lorenzo.carletti@unimore.it>
+#
+#               2023 Federico Motta    <federico.motta@unimore.it>
 #                    Lorenzo  Carletti <lorenzo.carletti@unimore.it>
 #                    Matteo   Vanzini  <matteo.vanzini@unimore.it>
 #                    Andrea   Serafini <andrea.serafini@unimore.it>
@@ -21,10 +24,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-   Preprocess datasets/01..04*.xlsx to have research-ready datasets
+Preprocess datasets/01..04*.xlsx to have research-ready datasets
 
-   Usage:
-            coming soon...
+Usage:
+         coming soon...
 """
 
 from argparse import FileType
@@ -44,35 +47,39 @@ import pandas as pd
 from sklearn.impute import KNNImputer
 
 __DEFAULT = dict(
+    drop_nan=False,
+    flatten_multi_index=["NUM Pellegrini", "Isogloss", "Code", "Label"],
+    impute_nan=0,
     input=None,
-    sheet=0,
+    maintain_original_values=False,
+    output=None,
     pivot_cell="TP",
     pivot_cell_type="record",
-    flatten_multi_index=["NUM Pellegrini", "Isogloss", "Code", "Label"],
-    drop_nan=True,
-    impute_nan=0,
-    output=None,
+    sheet=0,
+    sort_rows=True,
+    sort_columns=True,
     verbose=0,
 )
 
 
-def preprocess_excel_file(**kwargs):
+def clean_excel_file(**kwargs):
     for k, v in kwargs.items():
         assert k in __DEFAULT, str(
             "Unrecognized parameter"
-            f" {preprocess_excel_file.__name__}( ... {k}={v!r} ... )"
+            f" {clean_excel_file.__name__}( ... {k}={v!r} ... )"
             f"\nPlease use only the available ones:\n\t"
             + "\n\t".join(sorted(__DEFAULT.keys(), key=str.lower))
         )
     for k, v in __DEFAULT.items():
         if k not in kwargs:
             kwargs[k] = v
-    debug(f"Calling {preprocess_excel_file.__name__}(")
+    debug(f"\n\n\nCalling {clean_excel_file.__name__}(")
     for k, v in kwargs.items():
         debug(f"{k:<16} = {v!r}")
-    debug(")\n\n")
+    debug(")\n\n\n")
 
     # Discover available sheets
+    info(f"Reading excel file {kwargs['input'].name!s}")
     sheets = set(pd.read_excel(kwargs["input"], sheet_name=None).keys())
     debug(f"Available sheets: {repr(sorted(sheets, key=str.lower))[1:-1]}.")
     assert kwargs["sheet"] in sheets | set(
@@ -85,7 +92,21 @@ def preprocess_excel_file(**kwargs):
         false_values=["-", "No", "no", " -"],
         na_values=set(MISSING_VALUES).difference({"+/-", "-/+"}),
     )
+    if kwargs["maintain_original_values"]:
+        debug(
+            "Ignoring the following excel_kwargs, since we don't "
+            "want to replace anyone of them because of "
+            "-m/--maintain-original-values"
+        )
+        for k in set(excel_kwargs.keys()):
+            if k.endswith("_values"):
+                debug(f"{k:>16}={excel_kwargs.pop(k)!r}")
     df = pd.read_excel(kwargs["input"], **excel_kwargs)
+
+    # sometimes we need to treat the very first row as a row instead
+    # of a table header because otherwise the following code cannot
+    # find the pivot cell
+    df = df.transpose().reset_index(drop=False).transpose()
     debug(
         "Hypothetical columns:\n\t"
         + "\n\t".join(
@@ -158,6 +179,10 @@ def preprocess_excel_file(**kwargs):
                 )
     except StopIteration as e:
         info(str(e))  # empty rows are skipped, thus the row may be smaller!
+
+        # because of the above transpose/reset_index/transpose we
+        # added without really wanting it a fake row at the very top
+        excel_kwargs["skiprows"] -= 1
         if "skipfooter" in excel_kwargs:
             excel_kwargs["skipfooter"] = set(  #
                 excel_kwargs.pop("skipfooter")
@@ -175,6 +200,10 @@ def preprocess_excel_file(**kwargs):
                     "Could not selectively skip non-adjacent rows "
                     + repr(tuple(excel_kwargs.pop("skipfooter")))
                 )
+        debug(f"{excel_kwargs['index_col']=}")
+        if not excel_kwargs["index_col"]:
+            excel_kwargs["index_col"] = None
+        debug(f"{expected_columns=}")
         debug(excel_kwargs)
     else:
         critical(
@@ -188,7 +217,7 @@ def preprocess_excel_file(**kwargs):
     debug(
         "Dataset contains the following values: "
         + repr(sorted(set(df.values.flatten()), key=str))[1:-1]
-        + "."
+        + ".\n\n"
     )
     if expected_columns is not None and set(df.columns).difference(
         set(expected_columns)
@@ -205,7 +234,11 @@ def preprocess_excel_file(**kwargs):
 
     # Avoid using multi-index, let's arbitrarily choose the left most one
     if len(df.index.names) > 1:
-        warning("Rows have multiple indexes: " + repr(list(df.index.names))[1:-1] + "!")
+        warning(
+            "Rows have multiple indexes: "
+            + repr(list(df.index.names))[1:-1]
+            + " !!!\n"
+        )
         for col in kwargs["flatten_multi_index"]:
             if col in df.index.names:
                 df = df.reset_index(
@@ -230,86 +263,103 @@ def preprocess_excel_file(**kwargs):
         )
         df = df.iloc[sorted(set(range(df.shape[0])) - set(drop_rows)), :]
 
-    # sort index (rows) and columns
-    df = (
-        df.loc[:, sorted(df.columns, key=str.lower)]
-        .reset_index(names="index")
-        .assign(
-            sort_by=lambda _df: pd.Series(
-                [
-                    (
-                        str(
-                            int(
-                                _df.loc[i, "index"]
-                                .split("=")[0]
-                                .strip(ascii_letters + punctuation)
-                            )
-                        ).rjust(2, "0")
-                        if "=" in str(_df.loc[i, "index"])
-                        else str("0" if flag else "")
-                    )
-                    for i, flag in _df["index"].astype(str).str.len().eq(1).items()
-                ],
-                dtype="string",
-            ).str.cat(_df["index"].astype("string"), join="right")
+    if kwargs["sort_rows"]:
+        df = (
+            df.reset_index(names="index")
+            .assign(
+                sort_by=lambda _df: pd.Series(
+                    [
+                        (
+                            str(
+                                int(
+                                    _df.loc[i, "index"]
+                                    .split("=")[0]
+                                    .strip(ascii_letters + punctuation)
+                                )
+                            ).rjust(2, "0")
+                            if "=" in str(_df.loc[i, "index"])
+                            else str("0" if flag else "")
+                        )
+                        for i, flag in _df["index"]
+                        .astype(str)
+                        .str.len()
+                        .eq(1)
+                        .items()
+                    ],
+                    dtype="string",
+                ).str.cat(_df["index"].astype("string"), join="right")
+            )
+            .sort_values("sort_by")
+            .drop(  # comment this line to debug index sorting
+                columns="sort_by"
+            )
+            .set_index("index")
+            .rename_axis(df.index.name, axis=0)
         )
-        .sort_values("sort_by")
-        .drop(columns="sort_by")  # comment this line to debug index sorting
-        .set_index("index")
-        .rename_axis(df.index.name, axis=0)
-    )
-    # Somehow input 03 and 04 fail automagically converting some of the
-    # true/false values; maybe because of the duplicated header, which
-    # however we already dropped at this point
-    df = df.replace({tv: True for tv in excel_kwargs["true_values"]}).replace(
-        {fv: False for fv in excel_kwargs["false_values"]}
-    )
+    if kwargs["sort_columns"]:
+        df = df.loc[:, sorted(df.columns, key=str.lower)]
+    debug(f"Post rows/columns sorting dataset\n{df.to_string()}\n{'~' * 80}")
 
-    # we chose with Andrea Sgarro that +/- and -/+ were treatable as 0.5
-    # in a fuzzy way
-    df = df.replace({"+/-": 0.5, "-/+": 0.5})
+    if not kwargs["maintain_original_values"]:
+        # Somehow input 03 and 04 fail automagically converting some
+        # of the true/false values; maybe because of the duplicated
+        # header, which however we already dropped at this point
+        df = df.replace({tv: True for tv in excel_kwargs["true_values"]})
+        df = df.replace({fv: False for fv in excel_kwargs["false_values"]})
+
+        # we chose with Andrea Sgarro that +/- and -/+ were treatable
+        # as 0.5 in a fuzzy way
+        df = df.replace({"+/-": 0.5, "-/+": 0.5})
 
     pivot_axis = kwargs.pop("pivot_cell_type")
+    debug(f"Pre-transposition dataset\n{df.to_string()}\n{'-' * 80}")
     if pivot_axis in ("record", "row"):
         debug(f"Transposing dataset because of {pivot_axis=}")
         df = df.transpose()
 
-    if kwargs["drop_nan"]:
-        debug("Dropping columns/features with missing data")
-        df = df.dropna(axis=1)
-    if kwargs["impute_nan"] < 0:
-        critical("The number of neighbors must be > 0")
-        raise SystemExit(2)
-    elif kwargs["impute_nan"] > 0:  # if k==0 this is skipped
-        debug(f"Imputing missing values with {kwargs['impute_nan']} neighbors")
-        df = df.rename(columns=str)
+    if not kwargs["maintain_original_values"]:
+        if kwargs["drop_nan"]:
+            debug("Dropping columns/features with missing data")
+            df = df.dropna(axis=1)
+        if kwargs["impute_nan"] < 0:
+            critical("The number of neighbors must be > 0")
+            raise SystemExit(2)
+        elif kwargs["impute_nan"] > 0:  # if k==0 this is skipped
+            debug(
+                "Imputing missing values with "
+                f"{kwargs['impute_nan']} neighbors"
+            )
+            df = df.rename(columns=str)
 
-        # keep_empty_features=True => if a feature is full NaN, it is
-        # set to False metric can also be set to "nan_euclidean"
-        imputer = KNNImputer(
-            n_neighbors=kwargs["impute_nan"],
-            weights="distance",
-            metric=hamming,
-            keep_empty_features=True,
-        )
-        imputed_array = imputer.fit_transform(df)
+            # keep_empty_features=True => if a feature is full NaN, it is
+            # set to False metric can also be set to "nan_euclidean"
+            imputer = KNNImputer(
+                n_neighbors=kwargs["impute_nan"],
+                weights="distance",
+                metric=hamming,
+                keep_empty_features=True,
+            )
+            imputed_array = imputer.fit_transform(df)
 
-        if "1970" in kwargs["input"].name:
-            df = pd.DataFrame(
-                imputed_array,
-                columns=df.columns,
-                index=df.index,
-            ).astype("float")
-        else:
-            df = pd.DataFrame(
-                imputed_array,
-                columns=df.columns,
-                index=df.index,
-            ).ge(0.5)
+            if "1970" in kwargs["input"].name:
+                df = pd.DataFrame(
+                    imputed_array,
+                    columns=df.columns,
+                    index=df.index,
+                ).astype("float")
+            else:
+                df = pd.DataFrame(
+                    imputed_array,
+                    columns=df.columns,
+                    index=df.index,
+                ).ge(0.5)
 
     debug(f"final dataframe\n{df.to_string()}\n\n{df.shape=}")
 
-    if set(df.values.flatten()) != {True, False}:
+    if not kwargs["maintain_original_values"] and set(df.values.flatten()) != {
+        True,
+        False,
+    }:
         warning(
             "Dataset contains the following non-boolean values: "
             + repr(
@@ -328,7 +378,7 @@ def preprocess_excel_file(**kwargs):
     except Exception as e:
         critical(str(e))
         raise SystemExit(3)
-
+    debug(f"End of function {clean_excel_file.__name__}()\n\n")
     return df
 
 
@@ -366,12 +416,19 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-f",
-        "--flatten-multi-index",  #         dest="flat_index",
+        "--flatten-multi-index",  # dest="flat_index",
         default=__DEFAULT["flatten_multi_index"],
         help="Preferred order of columns guiding the multi-index substitution",
         metavar="col",
         nargs="+",
         type=str,
+    )
+    parser.add_argument(
+        "-m",
+        "--maintain-original-values",
+        action="store_true",
+        default=__DEFAULT["maintain_original_values"],
+        help="Keep +, -, +/-, 0, ? values",
     )
     parser.add_argument(
         "-0",
@@ -382,7 +439,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-k",
-        "--impute-nan",  #         dest="n_neighbors",
+        "--impute-nan",  # dest="n_neighbors",
         default=__DEFAULT["impute_nan"],
         help="Impute missing data with K nearest neighbors",
         metavar="int",
@@ -413,4 +470,4 @@ if __name__ == "__main__":
     )
     debug(f"{parsed_args=}")
 
-    preprocess_excel_file(**vars(parsed_args))
+    clean_excel_file(**vars(parsed_args))
