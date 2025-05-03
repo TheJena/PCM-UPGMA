@@ -24,10 +24,14 @@ Usage:
 """
 
 from argparse import FileType
-from logging import debug, warning
+from logging import debug, info, warning
 from os.path import basename
 from utility import get_cli_parser, initialize_logging
+from string import ascii_letters, digits
+from tempfile import NamedTemporaryFile
 import pandas as pd
+
+from preprocessing import clean_excel_file
 
 parser = get_cli_parser(__doc__, __file__)
 
@@ -66,6 +70,13 @@ parser.add_argument(
     type=str,
 )
 parser.add_argument(
+    "-f",
+    "--force",
+    action="store_true",
+    help="Force usage of implicational condition(s) index "
+    "(Input matrix index will be ignored)",
+)
+parser.add_argument(
     "-I",
     "--input-matrix",
     default=None,
@@ -77,9 +88,17 @@ parser.add_argument(
 parser.add_argument(
     "-S",
     "--matrix-sheet",
-    default="params",
+    default="TABLE A_2024 (2)",
     help="Sheet number or name to read from --input-matrix",
+    metavar="int|str",
+)
+parser.add_argument(
+    "-P",
+    "--matrix-pivot",
+    default="TP",
+    help="First parameter column name in --matrix-sheet",
     metavar="str",
+    type=str,
 )
 parser.add_argument(
     "-m",
@@ -113,31 +132,34 @@ initialize_logging(
 )
 debug(f"{parsed_args=}")
 
-# Discover available sheets
-df_dict = pd.read_excel(parsed_args.input_rules, sheet_name=None)
-
-df = df_dict.get(parsed_args.rules_sheet, None)
-if df is None:
-    debug(
-        "Available sheets: "
-        + repr(
-            sorted(
-                set(df_dict.keys()),
-                key=str.lower,
+df = clean_excel_file(
+    input=parsed_args.input_rules,
+    sheet=parsed_args.rules_sheet,
+    pivot_cell="Label",
+    pivot_cell_type="feature",
+    maintain_original_values=True,
+    sort_rows=False,
+    output=NamedTemporaryFile(
+        mode="wb",
+        prefix="".join(
+            c if c in f"{ascii_letters}{digits}" else "_"
+            for c in str(
+                f"file__{basename(parsed_args.input_rules.name)}_"
+                f"___sheet__{basename(parsed_args.rules_sheet)}__"
             )
-        )[1:-1]
-    )
-    parser.error(
-        f"Could not find sheet {parsed_args.rules_sheet!r}. "
-        "Please increase verbosity to see available sheets (above)"
-    )
-del df_dict
-
+        ),
+        suffix=".xlsx",
+    ),
+    verbose=0,
+)
 
 for col in (parsed_args.parameter, parsed_args.formula):
     assert col in df.columns, str(
         f"Column {col!r} not found in {parsed_args.input_rules.name}"
     )
+
+parameter_default_order = df.loc[:, parsed_args.parameter].dropna()
+debug(f"parameter_default_order={parameter_default_order.to_list()!r}")
 
 impl_dict = (
     df.set_index(
@@ -148,8 +170,15 @@ impl_dict = (
     .sort_index()
     .to_dict()
 )
-for k, v in impl_dict.items():
+for k in sorted(impl_dict.keys(), key=lambda v: repr(v).lower()):
+    v = impl_dict.pop(k)
+    if k not in set(parameter_default_order) or pd.isna(k):
+        debug(f"Dropping useless Label={k!r} ~> Formula={v!r}")
+        continue
     debug(f"{k:<8}\t{v!r}")
+    assert isinstance(k, str), repr(k)
+    impl_dict[k] = v
+debug("\n\n")
 del df
 
 
@@ -191,42 +220,123 @@ for param in sorted(impl_dict.keys(), key=str.lower):
 
     impl_dict[param] = formula
 
-# Discover available sheets
-df_dict = pd.read_excel(parsed_args.input_matrix, sheet_name=None)
 
-df = df_dict.get(parsed_args.matrix_sheet, None)
-if df is None:
-    debug(
-        "Available sheets: "
-        + repr(
-            sorted(
-                set(df_dict.keys()),
-                key=str.lower,
+df = clean_excel_file(
+    input=parsed_args.input_matrix,
+    sheet=parsed_args.matrix_sheet,
+    pivot_cell=parsed_args.matrix_pivot,
+    pivot_cell_type="feature",
+    maintain_original_values=True,
+    sort_rows=False,
+    sort_columns=True,
+    output=NamedTemporaryFile(
+        mode="wb",
+        prefix="".join(
+            c if c in f"{ascii_letters}{digits}" else "_"
+            for c in str(
+                f"file__{basename(parsed_args.input_matrix.name)}_"
+                f"___sheet__{basename(parsed_args.matrix_sheet)}__"
             )
-        )[1:-1]
-    )
-    parser.error(
-        f"Could not find sheet {parsed_args.matrix_sheet!r}. "
-        "Please increase verbosity to see available sheets (above)"
-    )
+        ),
+        suffix=".xlsx",
+    ),
+    verbose=0,
+)
 
-param_col = df.columns[0]
+df = df.dropna(axis="columns", thresh=min(5, df.shape[0]))
+debug(f"df=\t#Dropped cols with <= 5 non-missing values\n{df.to_string()}")
+
+for i in range(df.shape[0]):
+    if df.iloc[i, :].eq(list(df.columns)).sum() >= 0.5:
+        info(f"Dropping redundant row:\n\t{df.iloc[i, :].to_list()!s}")
+        df = df.iloc[[j for j in range(df.shape[0]) if i != j], :]
+
+for col in sorted(df.columns):
+    if df[col].eq(df.index.values).sum() >= 0.5:
+        info(f"Dropping redundant column {col!r}")
+        df = df.drop(columns=col)
+
+if not (
+    df.index.size == parameter_default_order.size
+    and all(
+        a == b
+        for a, b in zip(
+            df.index.to_series().to_list(), parameter_default_order.to_list()
+        )
+    )
+):
+    warning(
+        f"The index of the --input-matrix (size={df.index.size}) "
+        f"is not exactly equal to the one found in --input-rules "
+        f"(size={parameter_default_order.size})!\n"
+        f"Use (-v/--verbose) twice to see a value-by-value comparison"
+    )
+    debug(
+        "\n"
+        + pd.concat(
+            [
+                pd.Series(df.index.values),
+                pd.Series(parameter_default_order.to_list()),
+            ],
+            axis=1,
+            ignore_index=True,
+        )
+        .rename(columns=dict(enumerate(["input_matrix", "input_rules"])))
+        .assign(
+            DIFFERING=lambda _df: (
+                _df.input_matrix != _df.input_rules
+            ).replace({True: "YES", False: ""})
+        )
+        .to_string()
+    )
+    info(
+        "Use -f/--force to override the index found in input matrix "
+        "with the one found in input rules"
+    )
+    if not parsed_args.force:
+        raise SystemExit(11)
+
+if set(df.index.values) & set(parameter_default_order.to_list()):
+    # leveraging only the overlapping values
+    df = df.loc[
+        [i for i in parameter_default_order.to_list() if i in df.index.values],
+        :,
+    ]
+else:  # truncating (since hopefully longer) input matrix
+    assert len(df.index.values) > len(parameter_default_order.to_list()), str(
+        "Conditional implications are about more parameters than "
+        "those found in input matrix!\nPlease provide either less "
+        "conditional implications or more parameters within input "
+        "matrix"
+    )
+    df = df.iloc[range(parameter_default_order.size), :].set_index(
+        pd.Index(parameter_default_order.to_list())
+    )
+parameter_default_order = list(df.index.values)
+debug(f"{parameter_default_order=}")
 
 df = (
-    df.assign(**{param_col: lambda _df: _df[param_col].str.upper()})
-    .sort_values(param_col)
-    .set_index(param_col)
+    df.reset_index(drop=False, names="Parameter")
+    .assign(
+        **{
+            "Parameter": lambda _df: _df["Parameter"]
+            .astype("string")
+            .str.upper()
+        }
+    )
+    .sort_values("Parameter")
+    .set_index("Parameter")
 )
 debug(f"\n{df.to_string()}")
 
-
-for lang in sorted(df.columns, key=str.lower):
-    lang_dict = df[lang].to_dict()
-    # debug(f"[{lang}]\t\t{lang_dict!r}".replace("'", ""))
+failed_implications = 0
+for lang_name, lang_params in df.items():
+    lang_params = lang_params.to_dict()
+    debug(f"[{lang_name}]\t=\t{lang_params!r}".replace("'", ""))
     for param, formula in impl_dict.items():
-        param_value_in_lang = lang_dict[param]
+        param_value_in_lang = lang_params[param]
         original_formula = str(formula)
-        for k, v in lang_dict.items():
+        for k, v in lang_params.items():
             formula = formula.replace(k, repr(v))
         formula_result = (formula == "") or eval(formula)
 
@@ -235,7 +345,14 @@ for lang in sorted(df.columns, key=str.lower):
         elif formula_result and param_value_in_lang in ("+", "-"):
             continue  # implication verified
         warning(
-            f"Conditional implication failed in language {lang!r}:\n\t"
+            f"Conditional implication failed in language {lang_name!r}:\n\t"
             f"{param:<4} := {original_formula}\n\t"
             f"{param_value_in_lang:^3} =!= {formula}\n\t"
         )
+        failed_implications += 1
+
+if failed_implications == 0:
+    info(
+        "All the conditional implications were verified "
+        "in the provided languages :)"  # fmt: skip
+    )
