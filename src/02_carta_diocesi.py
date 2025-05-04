@@ -118,8 +118,6 @@ with open(parsed_args.input_file, "r") as f:
         clusters.append(line)
 
 colors = colormaps.get_cmap("jet")
-markers = ["o", "^", "s", "*", "+", "x", "D", "v", "<", ">"]
-markers = markers[: len(clusters) + 1]
 
 italy = gpd.read_file(parsed_args.map_file)
 italy.geometry = italy.geometry.make_valid()
@@ -128,7 +126,6 @@ geo_df = gpd.GeoDataFrame(geometry=geometry)
 geo_df = geo_df.assign(
     lat=lambda _df: _df["geometry"].apply(lambda pt: pt.y),
     lon=lambda _df: _df["geometry"].apply(lambda pt: pt.x),
-    marker=[None for i in range(geo_df.shape[0])],
     values=[None for i in range(geo_df.shape[0])],
     color=[None for i in range(geo_df.shape[0])],
 )
@@ -136,14 +133,11 @@ geo_df = geo_df.assign(
 legend_handles = dict()
 
 for i, cluster in enumerate(clusters):
-    marker = markers[i]
-
     for lat, lon in df.loc[
         df.Label.isin(cluster), ["Latitude", "Longitude"]
     ].itertuples(index=False):
         value = float(i / len(clusters))
         color_str = color_rgb_tuple_to_hex(colors(value))
-        geo_df.loc[geo_df.lat.eq(lat) & geo_df.lon.eq(lon), "marker"] = marker
         geo_df.loc[geo_df.lat.eq(lat) & geo_df.lon.eq(lon), "values"] = value
         geo_df.loc[geo_df.lat.eq(lat) & geo_df.lon.eq(lon), "color"] = color_str
         chosen_label = str(i)
@@ -165,28 +159,24 @@ plt.close(fig)
 italy.crs = {"init": "epsg:4326"}
 geo_df.crs = {"init": "epsg:4326"}
 
-colors_map = []
-# Get the color for each polygon. Check against the clusters and their location
-# to apply the correct colors. Otherwise, fill with filler_color.
-for elem in italy.geometry:
-    processed = False
-    for idx, sub_elem in enumerate(geo_df.geometry):
-        # None check needed as geo_df contains some regions without languages...
-        if elem.contains(sub_elem) and ((wanted_color := geo_df.color[idx]) is not None):
-            colors_map += [wanted_color]
-            processed = True
-            break
-    if not processed:
-        colors_map += [filler_color]
+# Set color to fill_color by default for each polygon
+italy = italy.assign(color = [filler_color] * italy.shape[0])
+# Get the polygon ID that the clusters' positions match.
+# Replace the color there...
+merge_result = italy.sjoin(geo_df, how='inner', predicate='contains')
+for i, row in merge_result.iterrows():
+    # None check needed as geo_df contains some regions without languages...
+    if row['color_right'] is not None:
+        italy.at[i, 'color'] = row['color_right']
 
-ax = italy.plot(alpha=1.0, color=colors_map, zorder=1)
+ax = italy.plot(alpha=1.0, color=italy.color, zorder=1)
 ax = gpd.GeoSeries(
     italy.to_crs(epsg=4326)["geometry"].unary_union,
 ).boundary.plot(ax=ax, alpha=0.5, color=border_color, zorder=2, lw=0.5)
 
 final_legend_handles = []
 for elem in sorted(legend_handles.keys()):
-	final_legend_handles += [legend_handles[elem]]
+    final_legend_handles += [legend_handles[elem]]
 
 plt.legend(loc="upper right", handles=final_legend_handles)
 plt.title(title)
