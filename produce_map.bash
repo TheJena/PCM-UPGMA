@@ -13,7 +13,7 @@ mkdir ${PLOT_DIR}
 
 # Preprocess all dataset with knn-imputer
 for file in ${INPUT_FILE_LIST}; do
-	python3 ${SCRIPT_DIR}/00_preprocessing.py	\
+	python3 ${SCRIPT_DIR}/preprocessing.py		\
 		-i ${DATASET_DIR}"/"${file}		\
 		-o ${PREPROCESSED_DIR}"/"${file}	\
 		-k 5;

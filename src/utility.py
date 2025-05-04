@@ -116,7 +116,7 @@ def get_cli_parser(docstring, file_path):
         f"{msg}\n\n"
         + "\n".join(
             ret.format_help().split("\n")[
-                ret.format_help().split("\n").index("options:") :
+                ret.format_help().split("\n").index("options:") :  # noqa: E203
             ]
         )
     )

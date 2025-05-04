@@ -23,11 +23,23 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""
-Preprocess datasets/01..04*.xlsx to have research-ready datasets
+r"""
+Preprocess raw input datasets to have research-ready datasets
 
 Usage:
-         coming soon...
+    export DATASET_DIR="datasets";            \
+    export PREPROCESSED_DIR="out_preprocess"; \
+    for f in                                  \
+                Pellegrini_1970.xlsx          \
+                Pellegrini_1977.xlsx          \
+                SSWL.xlsx                     \
+                TableA_2025SI.xlsx            \
+        ; do                                  \
+        python3 src/preprocessing.py          \
+            -i "${DATASET_DIR}/${f}"          \
+            -o "${PREPROCESSED_DIR}/${f}"     \
+            --impute-nan 5;                   \
+    done
 """
 
 from argparse import FileType
