@@ -30,7 +30,7 @@ python3 ${SCRIPT_DIR}/${PYTHON_FILE_MAP}	\
 	-i ${PLOT_DIR}/clusters.txt		\
 	-o ${PLOT_DIR}
 
-# for i in `seq 0 3`; do
+# for i in `seq 1 4`; do
 # 	python3 ${SCRIPT_DIR}/${PYTHON_FILE_MAP}	\
 # 		-i ${PLOT_DIR}/clusters_${i}.txt	\
 # 		-o ${PLOT_DIR}

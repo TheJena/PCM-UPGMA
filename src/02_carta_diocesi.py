@@ -3,10 +3,13 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (C) 2023 Federico Motta    <federico.motta@unimore.it>
-#                    Lorenzo  Carletti <lorenzo.carletti@unimore.it>
-#                    Matteo   Vanzini  <matteo.vanzini@unimore.it>
-#                    Andrea   Serafini <andrea.serafini@unimore.it>
+# Copyright (C) 2024-2025 Federico Motta    <federico.motta@unimore.it>
+#                         Lorenzo  Carletti <lorenzo.carletti@unimore.it>
+#
+# Copyright (C)      2023 Federico Motta    <federico.motta@unimore.it>
+#                         Lorenzo  Carletti <lorenzo.carletti@unimore.it>
+#                         Matteo   Vanzini  <matteo.vanzini@unimore.it>
+#                         Andrea   Serafini <andrea.serafini@unimore.it>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,169 +23,413 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""
-Build a dendrogram by running UPGMA over some language parameters
-
-UPGMA (Unweighted Pair Group Method with Arithmetic mean) is a
-simple agglomerative (bottom-up) hierarchical clustering method
+r"""
+Geovisualize clusters with a thematic map
 
 Usage:
-     mkdir -p out_plot && python3 src/01_plot_clusters.py -i out_preprocess -o out_plot | grep -i record | grep -o '\\[.*\\]' | sort -V |uniq -c
+    export WORKSPACE="out_plot";              \
+    mkdir -p "${PLOT_DIR}";                   \
+    && python3 src/02_carta_diocesi.py        \
+        -i "${WORKSPACE}/clusters.txt         \
+        -m "${WORKSPACE}/diocese1250.shp"     \
+        -o "${WORKSPACE}/map_clusters.pdf"
 """
 
+from argparse import FileType
+from functools import cache
+from logging import debug, info  # , warning, critical
 from matplotlib import colormaps
+from os.path import basename
+from preprocessing import clean_excel_file
 from shapely.geometry import Point
-from utility import get_cli_parser, A4_PORTRAIT_PAGE_SIZE_INCHES
+from utility import (
+    A4_PORTRAIT_PAGE_SIZE_INCHES,
+    get_cli_parser,
+    initialize_logging,
+)
 import geopandas as gpd
 import matplotlib.pyplot as plt
-import pandas as pd
-
-def color_rgb_tuple_to_hex(color_input):
-    return '#{:02x}{:02x}{:02x}'.format(int(color_input[0] * 255), int(color_input[1] * 255), int(color_input[2] * 255)) 
 
 
-DPI = 300
-filler_color = "#EEEEEE"
-border_color = "#000000"
 
-parser = get_cli_parser(__doc__, __file__)
-parser.add_argument(
-    "-i",
-    "--input_file",
-    default="./clusters.txt",
-    help="File containing clusters given by 01_plot_clusters.py",
-    metavar="str",
-    required=True,
-    type=str,
-)
-parser.add_argument(
-    "-m",
-    "--map_file",
-    default="shapefile_diocese/diocese1250.shp",
-    help="File containing the shape file to use for the plots",
-    metavar="str",
-    required=False,
-    type=str,
-)
-parser.add_argument(
-    "-o",
-    "--output_dir",
-    default=".",
-    help="Directory where to put the resulting plots",
-    metavar="str",
-    required=True,
-    type=str,
-)
-parser.add_argument(
-    "-v",
-    "--verbose",
-    action="count",
-    default=0,
-    dest="verbosity",
+__DEFAULT = dict(
+    allowed_extensions=("jpg", "pdf", "png", "svg"),
+    border_color="#0767ba",
+    dpi=300,
+    fill_color="#bfdff9",  # aka rgba="#3e9df059" to rgb according to gimp
+    geo_coordinates="./datasets/99_dialects_lat_long_geolocation_clean.xlsx",
+    input_file="./out_plot/clusters.txt",
+    map_file="./shapefile_diocese/diocese1250.shp",
+    output_file="./out_plot/mappa_clusters.pdf",
+    verbose=0,
 )
 
-parsed_args = parser.parse_args()
 
-df = pd.read_excel("datasets/99_dialects_lat_long_geolocation_clean.xlsx")
+def component2hex(f):
+    assert f >= 0 and f <= 1, f"{f=} shoult be a float in [0, 1]"
+    return f"{int(f * 255):02x}"
 
-df.columns = [
-    "Language",
-    "Label",
-    "Glottocode",
-    "Iso 639-3 Code",
-    "Dialect Group",
-    "Location",
-    "Latitude",
-    "Longitude",
-]
 
-lat, lon = df.Latitude, df.Longitude
-geometry = [Point(xy) for xy in zip(lon, lat)]
+def dms2dd(degrees, minutes, seconds, direction):
+    """Convert Degrees, Minutes, and Seconds (DMS) to Decimal Degrees (DD)"""
+    assert direction in ("N", "S", "E", "W"), repr(direction)
+    degrees, minutes, seconds = tuple(
+        map(lambda v: abs(int(v)), (degrees, minutes, seconds))
+    )
+    coeff = -1 if direction in ["W", "S"] else 1
+    ret = coeff * sum((degrees, minutes / 60.0, seconds / 3600.0))
+    debug(f"{(degrees, minutes, seconds)=}\t{direction} = {ret: >+10.6f}")
+    return ret
 
-clusters = list()
-is_last_clusterless = False
-title = ""
-with open(parsed_args.input_file, "r") as f:
-    for i, line in enumerate(f):
+
+def get_final_figure(
+    legend_handles,
+    title,
+    size=A4_PORTRAIT_PAGE_SIZE_INCHES,
+    show=False,
+    tight_layout=True,
+):
+    plt.legend(
+        loc="upper right",
+        bbox_to_anchor=(0.95, 0.95),
+        handles=legend_handles,
+    )
+    plt.title(title)
+    fig = plt.gcf()  # do not change the order of the following operations
+    if show:
+        plt.show()
+    fig.set_size_inches(size)
+    if tight_layout:
+        fig.tight_layout()
+    return fig
+
+
+def get_geo_filled_map(
+    shp_df,
+    ax=None,
+    color_col="color",
+    alpha=1,
+    zorder=1,
+    **kwargs,
+):
+    return shp_df.plot(
+        alpha=1,
+        ax=ax,
+        color=shp_df[color_col],
+        zorder=zorder,
+        **kwargs,
+    )
+
+
+def get_legend_handles(
+    clusters, df, geo_df, last_is_clusterless=False, legend_kwargs=None
+):
+    if legend_kwargs is None:
+        legend_kwargs = dict(ms=9, mec="none", ls="", marker="o")
+    legend_handles = dict()
+    for i, cluster in enumerate(clusters):
+        label = str(i)
+        if last_is_clusterless and i + 1 >= len(clusters):
+            label = "No Cluster"
+        info(f"Cluster {label:>10s} = {cluster!s}")
+        value = float(i / len(clusters))
+        color = link_color_func(value)
+        debug(f"cluster={label}\t{value=}\t{color=}")
+        for lat, lon in df.loc[
+            df.index.isin(cluster), ["Latitude", "Longitude"]
+        ].itertuples(index=False):
+            selector = geo_df["latitude"].eq(lat) & geo_df["longitude"].eq(lon)
+            geo_df.loc[selector, "color"] = color
+            geo_df.loc[selector, "label"] = label
+            geo_df.loc[selector, "values"] = value
+            legend_handles[value] = plt.plot(
+                list(), color=color, label=label, **legend_kwargs
+            ).pop(0)
+    debug(f"geo_df=\t\n{geo_df.to_string()}")
+    geo_df = geo_df.loc[geo_df["label"].notna(), :]
+    debug(f"geo_df=\t#dropped cities without cluster\n{geo_df.to_string()}")
+    legend_handles = [
+        v
+        for k, v in sorted(
+            legend_handles.items(),
+            key=lambda t: t[0],
+        )
+    ]
+    debug(f"{legend_handles=}")
+
+    plt.clf()  # clear the current figure
+    plt.cla()  # and axes
+    return legend_handles, geo_df.copy(deep=True).sort_index()
+
+
+def get_map_border(
+    shp_df,
+    ax=None,
+    alpha=0.5,
+    color="#000000",
+    crs="epsg:4326",
+    zorder=2,
+    **kwargs,
+):
+    assert "geometry" in shp_df.columns
+    return gpd.GeoSeries(
+        shp_df["geometry"].make_valid().union_all(), crs=crs
+    ).boundary.plot(ax=ax, alpha=alpha, color=color, zorder=zorder, **kwargs)
+
+
+@cache  # just removes redundant debugging messages
+def link_color_func(value):
+    return rgb2hex(colormaps.get_cmap("jet")(value))
+
+
+def load_clusters(io_obj):
+    title, clusters, last_is_clusterless = "", list(), False
+    for i, line in enumerate(io_obj.readlines()):
         line = line.strip()
-        if i == 0:
+        if not line or i == 0:
             title = line
             continue
-        if not line:
+        if line.startswith("C:"):
+            last_is_clusterless = True
             continue
-        if line == "C:":
-            is_last_clusterless = True
-            continue
+        clusters.append(line.split(" "))
+    info(f"Title = {title}")
+    return title, clusters, last_is_clusterless
 
-        line = line.split(" ")
-        clusters.append(line)
 
-colors = colormaps.get_cmap("jet")
+def load_lat_lon_file(**kwargs):
+    crs = kwargs.pop("crs", "epsg:4326")
 
-italy = gpd.read_file(parsed_args.map_file)
-italy.geometry = italy.geometry.make_valid()
+    df = clean_excel_file(**kwargs)
+    df = (
+        df.rename(
+            columns={
+                next(
+                    (c for c in df.columns if c.lower().startswith("label")),
+                    "Label",  # fallback value has no trailing obscenities
+                ): "Label"
+            }
+        )
+        .loc[:, ["Label", "Latitude", "Longitude"]]
+        .sort_values("Label")
+        .set_index("Label")
+        .rename_axis("Language", axis=0)
+    )
+    debug(f"geo_coordinates=\n{df.to_string()}")
+    df = df.astype("float")
+    debug(f"geo_coordinates=\n{df.to_string()}")
 
-geo_df = gpd.GeoDataFrame(geometry=geometry)
-geo_df = geo_df.assign(
-    lat=lambda _df: _df["geometry"].apply(lambda pt: pt.y),
-    lon=lambda _df: _df["geometry"].apply(lambda pt: pt.x),
-    values=[None for i in range(geo_df.shape[0])],
-    color=[None for i in range(geo_df.shape[0])],
-)
+    geometry = [Point(xy) for xy in zip(df["Longitude"], df["Latitude"])]
+    debug(
+        "geometry=\t# https://geopandas.org/en/stable/docs/reference/api/"
+        f"geopandas.GeoDataFrame.set_geometry.html\n{geometry!r}"
+    )
 
-legend_handles = dict()
+    geo_df = gpd.GeoDataFrame(crs=crs, geometry=geometry)
+    debug(f"geo_df(\t{crs=}\t)=\n{geo_df.to_string()}")
+    geo_df = geo_df.assign(
+        latitude=lambda _df: _df["geometry"].apply(lambda pt: pt.y),
+        longitude=lambda _df: _df["geometry"].apply(lambda pt: pt.x),
+        values=[None for i in range(geo_df.shape[0])],
+        color=[None for i in range(geo_df.shape[0])],
+    )
+    debug(f"geo_df=\n{geo_df.to_string()}")
+    return df, geo_df.sort_index()
 
-for i, cluster in enumerate(clusters):
-    for lat, lon in df.loc[
-        df.Label.isin(cluster), ["Latitude", "Longitude"]
-    ].itertuples(index=False):
-        value = float(i / len(clusters))
-        color_str = color_rgb_tuple_to_hex(colors(value))
-        geo_df.loc[geo_df.lat.eq(lat) & geo_df.lon.eq(lon), "values"] = value
-        geo_df.loc[geo_df.lat.eq(lat) & geo_df.lon.eq(lon), "color"] = color_str
-        chosen_label = str(i)
-        if i >= (len(clusters) - 1) and is_last_clusterless:
-            chosen_label = "No Cluster"
-        geo_df.loc[
-            geo_df.lat.eq(lat) & geo_df.lon.eq(lon),
-            "label",
-        ] = chosen_label
-        # Basically, prepare the legend's stuff
-        legend_handles[value] = plt.plot([],color=color_str, ms=9, mec="none",
-                        label=chosen_label, ls="", marker="o")[0]
 
-# Kill off the plot used to prepare the legend
-fig = plt.gcf()
-plt.clf()
-plt.close(fig)
+def load_shapefile(
+    filename,
+    clip_box=None,
+    crs="epsg:4326",
+    fill_alpha=0.35,
+    fill_color="#ffffff",
+):
+    """
+    https://geopandas.org/en/stable/docs/reference/api/geopandas.read_file.html
+    https://it.wikipedia.org/wiki/Italia_(regione_geografica)#Punti_estremi
+    north = 47° 04′ 20″ N
+    south = 35° 47′ 04″ N
+    east  = 18° 31′ 13″ E
+    west  = 06° 32′ 52″ E
+    """
+    shp_df = gpd.read_file(filename)
+    shp_df.geometry = shp_df.geometry.make_valid()
+    shp_df.set_crs(crs)
+    if clip_box is not None and not isinstance(clip_box, (list, tuple)):
+        assert clip_box == "italy", f"Please implement {clip_box=}"
+        clip_box = nsew2xy(
+            **dict(
+                north="47 04 20 N",
+                south="35 47 04 N",
+                east=" 18 31 13 E",
+                west=" 06 32 52 E",
+            )
+        )
+        debug(f"{clip_box=}")
+    shp_df = shp_df.clip(clip_box)
+    shp_df = shp_df.assign(
+        # fill by default each polygon in the shapefile with fill_color
+        color=lambda _: fill_color
+    )
+    return shp_df
 
-italy.crs = {"init": "epsg:4326"}
-geo_df.crs = {"init": "epsg:4326"}
 
-# Set color to fill_color by default for each polygon
-italy = italy.assign(color = [filler_color] * italy.shape[0])
-# Get the polygon ID that the clusters' positions match.
-# Replace the color there...
-merge_result = italy.sjoin(geo_df, how='inner', predicate='contains')
-for i, row in merge_result.iterrows():
-    # None check needed as geo_df contains some regions without languages...
-    if row['color_right'] is not None:
-        italy.at[i, 'color'] = row['color_right']
+def nsew2xy(**kwargs):
+    "North, south, east, west  to  minx, miny, maxx, maxy" ""
+    debug(f"{kwargs!r}")
+    n, s, e, w = [kwargs.pop(k) for k in "north south east west".split()]
+    debug(f"{(n, s, e, w)=}")
+    if isinstance(n, str) and len(n.split()) == 4:
+        n, s, e, w = [dms2dd(*coor.split()) for coor in (n, s, e, w)]
+    debug(f"{(n, s, e, w)=}")
+    assert s < n, f"{s=}\t{n=}"
+    assert w < e, f"{w=}\t{e=}"
+    return (w, s, e, n)
 
-ax = italy.plot(alpha=1.0, color=italy.color, zorder=1)
-ax = gpd.GeoSeries(
-    italy.to_crs(epsg=4326)["geometry"].unary_union,
-).boundary.plot(ax=ax, alpha=0.5, color=border_color, zorder=2, lw=0.5)
 
-final_legend_handles = []
-for elem in sorted(legend_handles.keys()):
-    final_legend_handles += [legend_handles[elem]]
+def rgb2hex(color):
+    debug(f"rgb={color}")
+    assert isinstance(color, (list, tuple)) and len(color) in {3, 4}
+    ret = "#" + "".join(map(component2hex, color))
+    debug(f"hex={ret}")
+    return ret
 
-plt.legend(loc="upper right", handles=final_legend_handles)
-plt.title(title)
-fig = plt.gcf()
-fig.set_size_inches(A4_PORTRAIT_PAGE_SIZE_INCHES)
-fig.tight_layout()  # hai modificato FrM e la lat lon di taranto nel
-# 99_clean.xlsx
-fig.savefig(parsed_args.input_file.replace(".txt", "__mappa.svg"), dpi=600)
-plt.show()
+
+def thematic_map(**kwargs):
+    for k, v in kwargs.items():
+        assert k in __DEFAULT, str(
+            "Unrecognized parameter"
+            f" {thematic_map.__name__}( ... {k}={v!r} ... )"
+            f"\nPlease use only the available ones:\n\t"
+            + "\n\t".join(sorted(__DEFAULT.keys(), key=str.lower))
+        )
+    for k, v in __DEFAULT.items():
+        if k not in kwargs:
+            kwargs[k] = v
+    debug(f"\n\n\nCalling {thematic_map.__name__}(")
+    for k in sorted(kwargs.keys(), key=str.lower):
+        v = kwargs.pop(k)
+        if (hasattr(v, "mode") and "b" in v.mode) and (
+            hasattr(v, "name") and "std" not in v.name and ".xls" not in v.name
+        ):  # avoid race conditions on file closure which may truncate it
+            v.close()
+            v = v.name
+        kwargs[k] = v
+        debug(f"{k:<16} = {v!r}")
+    debug(")\n\n\n")
+
+    df, geo_df = load_lat_lon_file(
+        input=kwargs["geo_coordinates"],
+        maintain_original_values=True,
+        pivot_cell="Label ",  # this trailing char is amazingly obscene
+        pivot_cell_type="feature",
+        sort_rows=False,
+        sort_columns=True,
+    )
+
+    shp_df = load_shapefile(
+        kwargs["map_file"], clip_box="italy", fill_color=kwargs["fill_color"]
+    )
+
+    title, clusters, last_is_clusterless = load_clusters(kwargs["input_file"])
+    legend_handles, geo_df = get_legend_handles(
+        clusters, df, geo_df, last_is_clusterless
+    )
+
+    shp_df = update_left_with_merged_info(left=shp_df, right=geo_df)
+
+    ax = get_geo_filled_map(shp_df)
+    ax = get_map_border(shp_df, ax=ax, color=kwargs["border_color"], lw=0.5)
+
+    fig = get_final_figure(legend_handles, title, show=not kwargs["verbose"])
+    # you changed FrM && taranto's lat/lon in 99_clean.xlsx
+    fig.savefig(kwargs["output_file"], dpi=600)
+
+
+def update_left_with_merged_info(left, right):
+    debug(f"{sorted(left.columns, key=str.lower)=}")
+    debug(f"{sorted(right.columns, key=str.lower)=}")
+    assert "color" in set(right.columns) & set(left.columns)
+
+    debug(f"left_df  valid predicates={left.sindex.valid_query_predicates}")
+    debug(f"right_df valid predicates={right.sindex.valid_query_predicates}")
+    merged = left.sjoin(
+        right,
+        how="inner",  # intersecates keys from both dfs + left_df geometry col
+        predicate="contains",
+    ).sort_index()
+    debug(
+        f"right_df\n{right.to_string()}\n\nmerged_df=\n"
+        + merged.loc[
+            :,
+            ["color_left", "color_right"],
+        ].to_string()
+        + f"\n\n{merged.shape=}\n"
+    )
+    for i, (left_idx, right_color) in enumerate(
+        merged.loc[merged["color_right"].notna(), ["color_right"]].itertuples()
+    ):
+        # I don't completely understand why this is necessary, but still...
+        if left.loc[left_idx, "color"] != right_color:
+            debug(
+                f"{i:03d})\tleft_df.loc[{left_idx=}, 'color'] "
+                f"\t<~\t{right_color=}"  # fmt: skip
+            )
+            left.loc[left_idx, "color"] = right_color
+    return left.copy(deep=True)
+
+
+if __name__ == "__main__":
+    parser = get_cli_parser(__doc__, __file__)
+    parser.add_argument(
+        "-g",
+        "--geo-coordinates",
+        default=__DEFAULT["geo_coordinates"],
+        help="Excel file containing latitude/longitude information",
+        metavar="xlsx",
+        type=FileType("rb"),
+    )
+    parser.add_argument(
+        "-i",
+        "--input-file",
+        default=__DEFAULT["input_file"],
+        help="Clusters produced by 01_plot_clusters.py",
+        metavar="txt",
+        required=True,
+        type=FileType("r"),
+    )
+    parser.add_argument(
+        "-m",
+        "--map-file",
+        default=__DEFAULT["map_file"],
+        help="Shapefile used to gelocalize clusters",
+        metavar="shp",
+        type=FileType("rb"),
+    )
+    parser.add_argument(
+        "-o",
+        "--output-file",
+        default=__DEFAULT["output_file"],
+        help="Plot of geolocalized clusters (allowed extensions: "
+        + ", ".join(sorted(__DEFAULT["allowed_extensions"]))
+        + ")",
+        metavar="path",
+        required=True,
+        type=FileType("wb"),
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=__DEFAULT["verbose"],
+    )
+
+    parsed_args = parser.parse_args()  # parse CLI arguments
+
+    initialize_logging(
+        basename(__file__).removesuffix(".py").rstrip("_") + "__debug.log",
+        parsed_args.verbose,
+    )
+    debug(f"{parsed_args=}")
+
+    thematic_map(**vars(parsed_args))
