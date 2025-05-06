@@ -27,8 +27,6 @@ from argparse import FileType
 from logging import debug, info, warning
 from os.path import basename
 from utility import get_cli_parser, initialize_logging
-from string import ascii_letters, digits
-from tempfile import NamedTemporaryFile
 import pandas as pd
 
 from preprocessing import clean_excel_file
@@ -139,17 +137,6 @@ df = clean_excel_file(
     pivot_cell_type="feature",
     maintain_original_values=True,
     sort_rows=False,
-    output=NamedTemporaryFile(
-        mode="wb",
-        prefix="".join(
-            c if c in f"{ascii_letters}{digits}" else "_"
-            for c in str(
-                f"file__{basename(parsed_args.input_rules.name)}_"
-                f"___sheet__{basename(parsed_args.rules_sheet)}__"
-            )
-        ),
-        suffix=".xlsx",
-    ),
     verbose=0,
 )
 
@@ -229,17 +216,6 @@ df = clean_excel_file(
     maintain_original_values=True,
     sort_rows=False,
     sort_columns=True,
-    output=NamedTemporaryFile(
-        mode="wb",
-        prefix="".join(
-            c if c in f"{ascii_letters}{digits}" else "_"
-            for c in str(
-                f"file__{basename(parsed_args.input_matrix.name)}_"
-                f"___sheet__{basename(parsed_args.matrix_sheet)}__"
-            )
-        ),
-        suffix=".xlsx",
-    ),
     verbose=0,
 )
 

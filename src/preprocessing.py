@@ -45,7 +45,8 @@ Usage:
 from argparse import FileType
 from logging import debug, info, warning, critical
 from os.path import basename
-from string import ascii_letters, punctuation
+from string import ascii_letters, digits, punctuation
+from tempfile import NamedTemporaryFile
 from utility import (
     ALLOWED_EXTENSIONS,
     get_cli_parser,
@@ -85,6 +86,28 @@ def clean_excel_file(**kwargs):
     for k, v in __DEFAULT.items():
         if k not in kwargs:
             kwargs[k] = v
+    assert kwargs["input"] is not None, "Please provide an excel file"
+    if kwargs["output"] is None:
+        kwargs["output"] = NamedTemporaryFile(
+            mode="wb",
+            prefix="".join(
+                c if c in f"{ascii_letters}{digits}" else "_"
+                for c in "__".join(
+                    map(
+                        str,
+                        (
+                            "file",
+                            basename(kwargs["input"].name),
+                            "",
+                            "sheet",
+                            kwargs["sheet"],
+                            "",
+                        ),
+                    )
+                )
+            ),
+            suffix=".xlsx",
+        )
     debug(f"\n\n\nCalling {clean_excel_file.__name__}(")
     for k, v in kwargs.items():
         debug(f"{k:<16} = {v!r}")
@@ -164,6 +187,7 @@ def clean_excel_file(**kwargs):
             .items()
             if flag
         ]
+        debug(f"{excel_kwargs['skipfooter']=}")
     try:
         for col_j in range(len(df.columns)):
             for row_i in range(len(df.index)):

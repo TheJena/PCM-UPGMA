@@ -243,7 +243,9 @@ def plot_clusters(**kwargs):
         print_clusterless=kwargs["print_clusterless"],
     )
 
-    for filename, grp in zip(input_file_list, lang2grp_mapping(dendrograms)):
+    for k, (filename, grp) in enumerate(
+        zip(input_file_list, lang2grp_mapping(dendrograms))
+    ):
         serialize_clusters(
             {
                 src_lang: [
@@ -258,7 +260,10 @@ def plot_clusters(**kwargs):
                 for src_lang in all_langs
             },
             grp.keys(),
-            path=join_path(kwargs["output_directory"], f"clusters_{k}.txt"),
+            path=join_path(
+                kwargs["output_directory"],
+                f"clusters_{k+1}.txt",
+            ),
             header=filename.removesuffix(".xlsx").replace("_", " "),
             print_clusterless=kwargs["print_clusterless"],
         )

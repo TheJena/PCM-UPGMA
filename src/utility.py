@@ -39,6 +39,7 @@ from logging import (
     getLogger,
     info,
 )
+from matplotlib import colormaps, colors
 from os import remove
 from os.path import realpath
 from sklearn.metrics import pairwise_distances
@@ -73,40 +74,6 @@ class HelpFormatter(
     pass
 
 
-def jaccard(l1, l2, *args, **kwargs):
-    """
-    Returns (1 / ceolin_jaccard) because ceolin's jaccard function
-    returns distance instead of similarity
-    """
-    l1 = ["+" if el > 0 else "-" for el in l1]
-    l2 = ["+" if el > 0 else "-" for el in l2]
-
-    dist = ceolin_jaccard(l1, l2)
-    return 1 if dist == 0 else dist
-
-
-def hamming(l1, l2, *args, **kwargs):
-    return pairwise_distances([l1], [l2], metric="hamming")
-
-
-def serialize(df, file_obj):
-    debug(f"{file_obj.name=}")
-    ext = file_obj.name.split(".")[-1]
-    if ext not in list(ALLOWED_EXTENSIONS.keys()) + ["<stdout>"]:
-        remove(file_obj.name)  # avoid creating empty files
-        raise Exception(f"Unrecognized output file extension: {ext}")
-    fun = getattr(df, ALLOWED_EXTENSIONS[ext])
-
-    assert file_obj.mode == "wb", f"{file_obj.name=}, {file_obj.mode=}"
-    if ext in ("csv", "txt"):
-        with open(file_obj.name, "w") as f:
-            fun(f)
-    elif ext == "npy":
-        np.save(file_obj, fun())
-    else:
-        fun(file_obj)
-
-
 def get_cli_parser(docstring, file_path):
     ret = ArgumentParser(
         **reflective_docs(docstring, file_path), formatter_class=HelpFormatter
@@ -121,6 +88,10 @@ def get_cli_parser(docstring, file_path):
         )
     )
     return ret
+
+
+def hamming(l1, l2, *args, **kwargs):
+    return pairwise_distances([l1], [l2], metric="hamming")
 
 
 def initialize_logging(suffix_filename, verbosity):
@@ -187,6 +158,22 @@ def initialize_logging(suffix_filename, verbosity):
     debug("")
 
 
+def jaccard(l1, l2, *args, **kwargs):
+    """
+    Returns (1 / ceolin_jaccard) because ceolin's jaccard function
+    returns distance instead of similarity
+    """
+    l1 = ["+" if el > 0 else "-" for el in l1]
+    l2 = ["+" if el > 0 else "-" for el in l2]
+
+    dist = ceolin_jaccard(l1, l2)
+    return 1 if dist == 0 else dist
+
+
+def link_color_func(k):
+    return colors.to_hex(colormaps.get_cmap("jet")(hash(k)))
+
+
 def reflective_docs(docstring, file_path, sep="Usage:"):
     docstring = docstring.split(sep if sep in docstring else None)[0].strip()
     gpl_license = "\n".join(
@@ -218,3 +205,21 @@ def reflective_docs(docstring, file_path, sep="Usage:"):
         + 1
     ]
     return dict(description=docstring, epilog="\n".join(gpl_license))
+
+
+def serialize(df, file_obj):
+    debug(f"{file_obj.name=}")
+    ext = file_obj.name.split(".")[-1]
+    if ext not in list(ALLOWED_EXTENSIONS.keys()) + ["<stdout>"]:
+        remove(file_obj.name)  # avoid creating empty files
+        raise Exception(f"Unrecognized output file extension: {ext}")
+    fun = getattr(df, ALLOWED_EXTENSIONS[ext])
+
+    assert file_obj.mode == "wb", f"{file_obj.name=}, {file_obj.mode=}"
+    if ext in ("csv", "txt"):
+        with open(file_obj.name, "w") as f:
+            fun(f)
+    elif ext == "npy":
+        np.save(file_obj, fun())
+    else:
+        fun(file_obj)
