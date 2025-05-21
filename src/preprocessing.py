@@ -285,7 +285,9 @@ def clean_excel_file(**kwargs):
                 )
                 break
         else:
-            df = df.reset_index(list(df.index.names)[:-1], drop=True)
+            df = df.reset_index(
+                list(range(len(df.index.names) - 1)), drop=True
+            )
         info(f"Column {df.index.name!r} will be used instead")
 
     # Drop duplicated headers (again)
