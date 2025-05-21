@@ -190,8 +190,29 @@ def clean_excel_file(**kwargs):
         debug(f"{excel_kwargs['skipfooter']=}")
     try:
         for col_j in range(len(df.columns)):
+            if str(df.columns[col_j]).strip() != kwargs["pivot_cell"]:
+                        continue
+            debug(f"first column")
+            excel_kwargs["index_col"] = list(range(col_j))
+            excel_kwargs["skiprows"] = 0
+            expected_columns = df.columns[col_j:].to_list()
+            raise StopIteration(
+                "Pivot matched cell "
+                + repr(
+                    ":".join(
+                        map(
+                            str,
+                            (
+                                chr(ord("A") + col_j),
+                                0,
+                            ),
+                        )
+                    )
+                )
+            )
+        for col_j in range(len(df.columns)):
             for row_i in range(len(df.index)):
-                if str(df.iloc[row_i, col_j]) != kwargs["pivot_cell"]:
+                if str(df.iloc[row_i, col_j]).strip() != kwargs["pivot_cell"]:
                     continue
                 debug(f"{row_i=}, {col_j=}")
                 excel_kwargs["index_col"] = list(range(col_j))
