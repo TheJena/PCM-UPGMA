@@ -25,6 +25,7 @@ black-view:
 			@
 
 clean:
+	@find . -iname "*.log"       -exec rm -v  {} \;
 	@find . -iname "*.pyc"       -exec rm -v  {} \;
 	@find . -iname ".DS_Store"   -exec rm -v  {} \;
 	@find . -iname "__pycache__" -empty -delete

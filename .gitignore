@@ -8,6 +8,7 @@ settings.sh
 src/script_jaccard.py
 *.jpeg
 *.jpg
+*.log
 *.m4a
 *.ogg
 *.png
