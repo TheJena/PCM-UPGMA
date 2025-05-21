@@ -169,7 +169,7 @@ def read_and_make_dendrogram(
         plot_title,
         plot_x_label,
         out_file_name,
-        0.65,
+        0.56,
         labels=languages,
         # color_threshold=0.7,
         # link_color_func=lambda k: colors.to_hex(
@@ -228,7 +228,9 @@ initialize_logging(
     parsed_args.verbosity,
 )
 
-input_file_list = os.listdir(parsed_args.input_directory)
+input_file_list = sorted(
+    os.listdir(parsed_args.input_directory), key=lambda v: repr(v).lower()
+)
 num_plots = len(input_file_list)
 
 

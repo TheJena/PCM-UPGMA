@@ -321,7 +321,7 @@ def thematic_map(**kwargs):
     df, geo_df = load_lat_lon_file(
         input=kwargs["geo_coordinates"],
         maintain_original_values=True,
-        pivot_cell="Label ",  # this trailing char is amazingly obscene
+        pivot_cell="Label",  # this trailing char is amazingly obscene
         pivot_cell_type="feature",
         sort_rows=False,
         sort_columns=True,

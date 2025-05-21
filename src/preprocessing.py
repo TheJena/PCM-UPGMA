@@ -141,7 +141,7 @@ def clean_excel_file(**kwargs):
     # sometimes we need to treat the very first row as a row instead
     # of a table header because otherwise the following code cannot
     # find the pivot cell
-    df = df.transpose().reset_index(drop=False).transpose()
+    # df = df.transpose().reset_index(drop=False).transpose()
     debug(
         "Hypothetical columns:\n\t"
         + "\n\t".join(
@@ -218,8 +218,10 @@ def clean_excel_file(**kwargs):
 
         # because of the above transpose/reset_index/transpose we
         # added without really wanting it a fake row at the very top
-        excel_kwargs["skiprows"] -= 1
+        # excel_kwargs["skiprows"] -= 1
         if "skipfooter" in excel_kwargs:
+            # TODO improve autodetection and removal of duplicate footer/right index
+
             excel_kwargs["skipfooter"] = set(  #
                 excel_kwargs.pop("skipfooter")
             ).difference(set(range(excel_kwargs["skiprows"])))
