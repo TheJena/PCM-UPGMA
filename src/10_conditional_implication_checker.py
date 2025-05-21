@@ -310,7 +310,7 @@ for lang_name, lang_params in df.items():
     lang_params = lang_params.to_dict()
     debug(f"[{lang_name}]\t=\t{lang_params!r}".replace("'", ""))
     for param, formula in impl_dict.items():
-        param_value_in_lang = lang_params[param]
+        param_value_in_lang = str(lang_params[param])
         original_formula = str(formula)
         for k, v in lang_params.items():
             formula = formula.replace(k, repr(v))
