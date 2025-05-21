@@ -191,7 +191,7 @@ def clean_excel_file(**kwargs):
     try:
         for col_j in range(len(df.columns)):
             if str(df.columns[col_j]).strip() != kwargs["pivot_cell"]:
-                        continue
+                continue
             debug(f"first column")
             excel_kwargs["index_col"] = list(range(col_j))
             excel_kwargs["skiprows"] = 0

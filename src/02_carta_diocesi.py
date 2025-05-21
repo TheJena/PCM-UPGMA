@@ -31,7 +31,7 @@ Usage:
     mkdir -p "${PLOT_DIR}";                   \
     && python3 src/02_carta_diocesi.py        \
         -i "${WORKSPACE}/clusters.txt         \
-        -m "${WORKSPACE}/diocese1250.shp"     \
+        -m "${WORKSPACE}/new_diocesi_1250.shp"     \
         -o "${WORKSPACE}/map_clusters.pdf"
 """
 
@@ -51,7 +51,6 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 
 
-
 __DEFAULT = dict(
     allowed_extensions=("jpg", "pdf", "png", "svg"),
     border_color="#0767ba",
@@ -59,8 +58,10 @@ __DEFAULT = dict(
     fill_color="#bfdff9",  # aka rgba="#3e9df059" to rgb according to gimp
     geo_coordinates="./datasets/99_dialects_lat_long_geolocation_clean.xlsx",
     input_file="./out_plot/clusters.txt",
-    map_file="./shapefile_diocese/diocese1250.shp",
+    map_file="./shapefile_diocese/new_diocesi_1250.shp",
     output_file="./out_plot/mappa_clusters.pdf",
+    do_markers=False,
+    do_areas=True,
     verbose=0,
 )
 
@@ -108,12 +109,12 @@ def get_geo_filled_map(
     shp_df,
     ax=None,
     color_col="color",
-    alpha=1,
+    alpha=0.5,
     zorder=1,
     **kwargs,
 ):
     return shp_df.plot(
-        alpha=1,
+        alpha=alpha,
         ax=ax,
         color=shp_df[color_col],
         zorder=zorder,
@@ -124,10 +125,13 @@ def get_geo_filled_map(
 def get_legend_handles(
     clusters, df, geo_df, last_is_clusterless=False, legend_kwargs=None
 ):
+    markers = ["o", "^", "s", "D", "v", "<", ">", "*", "+", "x"]
+    markers = markers[: len(clusters) + 1]
     if legend_kwargs is None:
         legend_kwargs = dict(ms=9, mec="none", ls="", marker="o")
     legend_handles = dict()
     for i, cluster in enumerate(clusters):
+        marker = markers[i]
         label = str(i)
         if last_is_clusterless and i + 1 >= len(clusters):
             label = "No Cluster"
@@ -140,8 +144,11 @@ def get_legend_handles(
         ].itertuples(index=False):
             selector = geo_df["latitude"].eq(lat) & geo_df["longitude"].eq(lon)
             geo_df.loc[selector, "color"] = color
+            geo_df.loc[selector, "lan_name"] = df.index[selector == True][0]
             geo_df.loc[selector, "label"] = label
             geo_df.loc[selector, "values"] = value
+            geo_df.loc[selector, "marker"] = marker
+            legend_kwargs["marker"] = marker
             legend_handles[value] = plt.plot(
                 list(), color=color, label=label, **legend_kwargs
             ).pop(0)
@@ -295,6 +302,18 @@ def rgb2hex(color):
     return ret
 
 
+def boolean_value(s):
+    try:
+        return int(s) != 0
+    except ValueError:
+        pass
+
+    lower_s = s.lower()
+    if lower_s not in {"false", "true"}:
+        raise ValueError("Not a valid boolean value")
+    return lower_s == "true"
+
+
 def thematic_map(**kwargs):
     for k, v in kwargs.items():
         assert k in __DEFAULT, str(
@@ -336,10 +355,21 @@ def thematic_map(**kwargs):
         clusters, df, geo_df, last_is_clusterless
     )
 
-    shp_df = update_left_with_merged_info(left=shp_df, right=geo_df)
+    if kwargs["do_areas"]:
+        shp_df = update_left_with_merged_info(left=shp_df, right=geo_df)
 
-    ax = get_geo_filled_map(shp_df)
+    color_alpha = 1.0
+    if kwargs["do_markers"] and kwargs["do_areas"]:
+        color_alpha = 0.5
+
+    ax = get_geo_filled_map(shp_df, alpha=color_alpha)
     ax = get_map_border(shp_df, ax=ax, color=kwargs["border_color"], lw=0.5)
+
+    if kwargs["do_markers"]:
+        by = ["marker", "label", "color"]
+        for i, (idx, _df) in enumerate(geo_df.groupby(by, as_index=True)):
+            plot_kwargs = dict(zip(by, idx))
+            ax = _df.plot(ax=ax, markersize=50, zorder=3, **plot_kwargs)
 
     fig = get_final_figure(legend_handles, title, show=not kwargs["verbose"])
     # you changed FrM && taranto's lat/lon in 99_clean.xlsx
@@ -366,6 +396,10 @@ def update_left_with_merged_info(left, right):
         ].to_string()
         + f"\n\n{merged.shape=}\n"
     )
+    duplicated_list = merged[
+        merged.duplicated(subset=["OBJECTID"], keep=False) == True
+    ]
+    debug(f"languages in same position\n{duplicated_list.to_string()}")
     for i, (left_idx, right_color) in enumerate(
         merged.loc[merged["color_right"].notna(), ["color_right"]].itertuples()
     ):
@@ -416,6 +450,22 @@ if __name__ == "__main__":
         metavar="path",
         required=True,
         type=FileType("wb"),
+    )
+    parser.add_argument(
+        "-k",
+        "--do-markers",
+        default=__DEFAULT["do_markers"],
+        help="Plot markers on the map",
+        metavar="True/False",
+        type=boolean_value,
+    )
+    parser.add_argument(
+        "-e",
+        "--do-areas",
+        default=__DEFAULT["do_areas"],
+        help="Plot areas on the map",
+        metavar="True/False",
+        type=boolean_value,
     )
     parser.add_argument(
         "-v",

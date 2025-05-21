@@ -40,16 +40,23 @@ python3 ${SCRIPT_DIR}/01_plot_clusters.py         \
     -v                                            \
 || exit 2
 
-python3 ${PYTHON_FILE_MAP}                        \
-    -i ${PLOT_DIR}/clusters.txt                   \
-    -o ${PLOT_DIR}/mappa_clusters.pdf             \
-    -v                                            \
-|| exit 3
+for extra_args in "--do-areas False --do-markers True" "--do-areas True --do-markers False" "--do-areas True --do-markers True" ;
+do
+	SUBPLOT_DIR="${PLOT_DIR}/${extra_args}"
+	mkdir -p "${SUBPLOT_DIR}"
+    python3 ${PYTHON_FILE_MAP}                            \
+        -i ${PLOT_DIR}/clusters.txt                       \
+        -o "${SUBPLOT_DIR}"/mappa_clusters.pdf            \
+        -v                                                \
+        ${extra_args}                                     \
+    || exit 3
 
-for i in `seq 0 3`; do
-    python3 ${PYTHON_FILE_MAP}                    \
-        -i ${PLOT_DIR}/clusters_${i}.txt          \
-        -o ${PLOT_DIR}/mappa_clusters_${i}.pdf    \
-        -v                                        \
-    || exit 4;
+    for i in `seq 0 3`; do
+        python3 ${PYTHON_FILE_MAP}                        \
+            -i ${PLOT_DIR}/clusters_${i}.txt              \
+            -o "${SUBPLOT_DIR}"/mappa_clusters_${i}.pdf   \
+            -v                                            \
+            ${extra_args}                                 \
+        || exit 4;
+    done
 done
