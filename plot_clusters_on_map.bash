@@ -12,8 +12,12 @@ fi
 DATASET_DIR="${1}"
 INPUT_FILE_LIST=$(cd "${DATASET_DIR}" && ls -v1 0[1234]_*.xlsx | fgrep -v "~")
 PLOT_SCRIPT="${PLOT_SCRIPT:-src/02_carta_diocesi.py}"
+SHAPEFILE="${SHAPEFILE:-shapefile_diocese/new_diocesi_1250.shp}"
 
 echo "Using PLOT_SCRIPT=${PLOT_SCRIPT}" >&2
+echo "Using SHAPEFILE=${SHAPEFILE}" >&2
+
+sleep 3
 
 PLOT_DIR="out_plot"
 PREPROCESSED_DIR="out_preprocess"
@@ -40,13 +44,17 @@ python3 ${SCRIPT_DIR}/01_plot_clusters.py         \
     -v                                            \
 || exit 2
 
-for extra_args in "--do-areas False --do-markers True" "--do-areas True --do-markers False" "--do-areas True --do-markers True" ;
+for extra_args in                                 \
+    "--do-areas False --do-markers True"          \
+    "--do-areas True  --do-markers False"         \
+    "--do-areas True  --do-markers True"          ;
 do
 	SUBPLOT_DIR="${PLOT_DIR}/${extra_args}"
 	mkdir -p "${SUBPLOT_DIR}"
     python3 ${PYTHON_FILE_MAP}                            \
         -i ${PLOT_DIR}/clusters.txt                       \
         -o "${SUBPLOT_DIR}"/mappa_clusters.pdf            \
+        -m "${SHAPEFILE}"                                 \
         -v                                                \
         ${extra_args}                                     \
     || exit 3
@@ -55,8 +63,30 @@ do
         python3 ${PYTHON_FILE_MAP}                        \
             -i ${PLOT_DIR}/clusters_${i}.txt              \
             -o "${SUBPLOT_DIR}"/mappa_clusters_${i}.pdf   \
+            -m "${SHAPEFILE}"                             \
             -v                                            \
             ${extra_args}                                 \
         || exit 4;
     done
 done
+
+find "${PLOT_DIR}" -iname '*_0*' -execdir rename -v 's/.*_0\./01_Pellegrini_1970./' {} +
+find "${PLOT_DIR}" -iname '*_1*' -execdir rename -v 's/.*_1\./02_Pellegrini_1977./' {} +
+find "${PLOT_DIR}" -iname '*_2*' -execdir rename -v 's/.*_2\./03_SSWL./' {} +
+find "${PLOT_DIR}" -iname '*_3*' -execdir rename -v 's/.*_3\./04_TableA_2025_SI./' {} +
+find "${PLOT_DIR}" -iname '*_clusters.*' -execdir rename -v 's/.*_clusters\./Four Tables fused./' {} +
+
+mkdir -p "${PLOT_DIR}/dendrograms"
+mv "${PLOT_DIR}/"*.svg "${PLOT_DIR}/dendrograms/"
+
+mkdir -p "${PLOT_DIR}/clusters"
+mv -v "${PLOT_DIR}/clusters.txt" "${PLOT_DIR}/clusters/Four Tables fused.txt"
+mv -v "${PLOT_DIR}/"*.txt        "${PLOT_DIR}/clusters/"
+
+mv -v "${PLOT_DIR}/"*areas*False*markers*True    "${PLOT_DIR}/only_markers"
+mv -v "${PLOT_DIR}/"*do-areas*True*markers*False "${PLOT_DIR}/only_areas"
+if echo "${SHAPEFILE}" | fgrep -i new; then
+    mv -v "${PLOT_DIR}/"*areas*True*markers*True "${PLOT_DIR}/markers_with_distinct_areas"
+else
+    mv -v "${PLOT_DIR}/"*areas*True*markers*True "${PLOT_DIR}/markers_with_overlapping_areas"
+fi
