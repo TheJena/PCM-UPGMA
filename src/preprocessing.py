@@ -74,6 +74,17 @@ __DEFAULT = dict(
     verbose=0,
 )
 
+def is_column_excel_in_list(elem, list_to_check, pivot_cell):
+    if elem == pivot_cell:
+        return False
+    if elem in list_to_check:
+        return True
+    # Accomodate how pandas loads duplicate column names
+    to_check_elem = elem.split(".")[0].strip()
+    if to_check_elem == pivot_cell:
+        return False
+    return to_check_elem in list_to_check
+    
 
 def clean_excel_file(**kwargs):
     for k, v in kwargs.items():
@@ -262,6 +273,11 @@ def clean_excel_file(**kwargs):
         debug(f"{excel_kwargs['index_col']=}")
         if not excel_kwargs["index_col"]:
             excel_kwargs["index_col"] = None
+        new_expected_columns = []
+        for elem in expected_columns:
+            if not is_column_excel_in_list(elem, kwargs["flatten_multi_index"], kwargs["pivot_cell"]):
+                new_expected_columns += [elem]
+        expected_columns = new_expected_columns
         debug(f"{expected_columns=}")
         debug(excel_kwargs)
     else:
@@ -311,6 +327,10 @@ def clean_excel_file(**kwargs):
             )
         info(f"Column {df.index.name!r} will be used instead")
 
+    base_columns_list = df.columns.to_list()
+    for elem in base_columns_list:
+        if is_column_excel_in_list(elem, kwargs["flatten_multi_index"], kwargs["pivot_cell"]):
+            df = df.drop(columns=elem)
     # Drop duplicated headers (again)
     drop_rows = [
         i
@@ -323,7 +343,6 @@ def clean_excel_file(**kwargs):
             + df.reset_index().iloc[drop_rows, :].to_string()
         )
         df = df.iloc[sorted(set(range(df.shape[0])) - set(drop_rows)), :]
-
     if kwargs["sort_rows"]:
         df = (
             df.reset_index(names="index")

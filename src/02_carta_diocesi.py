@@ -127,6 +127,7 @@ def get_legend_handles(
 ):
     markers = ["o", "^", "s", "D", "v", "<", ">", "*", "+", "x"]
     markers = markers[: len(clusters) + 1]
+    examined_languages = set()
     if legend_kwargs is None:
         legend_kwargs = dict(ms=9, mec="none", ls="", marker="o")
     legend_handles = dict()
@@ -145,6 +146,7 @@ def get_legend_handles(
             selector = geo_df["latitude"].eq(lat) & geo_df["longitude"].eq(lon)
             geo_df.loc[selector, "color"] = color
             geo_df.loc[selector, "lan_name"] = df.index[selector == True][0]
+            examined_languages.add(df.index[selector == True][0])
             geo_df.loc[selector, "label"] = label
             geo_df.loc[selector, "values"] = value
             geo_df.loc[selector, "marker"] = marker
@@ -152,7 +154,14 @@ def get_legend_handles(
             legend_handles[value] = plt.plot(
                 list(), color=color, label=label, **legend_kwargs
             ).pop(0)
-    debug(f"geo_df=\t\n{geo_df.to_string()}")
+    missing_languages = set()
+    for cluster in clusters:
+        for elem in cluster:
+            if elem not in examined_languages:
+                missing_languages.add(elem)
+    if len(missing_languages) > 0:
+        info(f"Languages missing point in map:\n{missing_languages}")
+    debug(f"geo_df=\n\t{geo_df.to_string()}")
     geo_df = geo_df.loc[geo_df["label"].notna(), :]
     debug(f"geo_df=\t#dropped cities without cluster\n{geo_df.to_string()}")
     legend_handles = [
@@ -258,6 +267,7 @@ def load_shapefile(
     south = 35° 47′ 04″ N
     east  = 18° 31′ 13″ E
     west  = 06° 32′ 52″ E
+    Edited east to 19° 50' to account for Cyprus
     """
     shp_df = gpd.read_file(filename)
     shp_df.geometry = shp_df.geometry.make_valid()
@@ -268,7 +278,7 @@ def load_shapefile(
             **dict(
                 north="47 04 20 N",
                 south="35 47 04 N",
-                east=" 18 31 13 E",
+                east=" 19 50 00 E",
                 west=" 06 32 52 E",
             )
         )

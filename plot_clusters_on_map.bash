@@ -12,7 +12,7 @@ fi
 DATASET_DIR="${1}"
 INPUT_FILE_LIST=$(cd "${DATASET_DIR}" && ls -v1 0[1234]_*.xlsx | fgrep -v "~")
 PLOT_SCRIPT="${PLOT_SCRIPT:-src/02_carta_diocesi.py}"
-SHAPEFILE="${SHAPEFILE:-shapefile_diocese/new_diocesi_1250.shp}"
+SHAPEFILE="${SHAPEFILE:-shapefile_diocese_cipro_close/cipro.shp}"
 
 echo "Using PLOT_SCRIPT=${PLOT_SCRIPT}" >&2
 echo "Using SHAPEFILE=${SHAPEFILE}" >&2
@@ -49,8 +49,8 @@ for extra_args in                                 \
     "--do-areas True  --do-markers False"         \
     "--do-areas True  --do-markers True"          ;
 do
-	SUBPLOT_DIR="${PLOT_DIR}/${extra_args}"
-	mkdir -p "${SUBPLOT_DIR}"
+    SUBPLOT_DIR="${PLOT_DIR}/${extra_args}"
+    mkdir -p "${SUBPLOT_DIR}"
     python3 ${PYTHON_FILE_MAP}                            \
         -i ${PLOT_DIR}/clusters.txt                       \
         -o "${SUBPLOT_DIR}"/mappa_clusters.pdf            \
@@ -60,13 +60,15 @@ do
     || exit 3
 
     for i in `seq 0 3`; do
-        python3 ${PYTHON_FILE_MAP}                        \
-            -i ${PLOT_DIR}/clusters_${i}.txt              \
-            -o "${SUBPLOT_DIR}"/mappa_clusters_${i}.pdf   \
-            -m "${SHAPEFILE}"                             \
-            -v                                            \
-            ${extra_args}                                 \
-        || exit 4;
+        if [ -f ${PLOT_DIR}/clusters_${i}.txt ]; then
+            python3 ${PYTHON_FILE_MAP}                        \
+                -i ${PLOT_DIR}/clusters_${i}.txt              \
+                -o "${SUBPLOT_DIR}"/mappa_clusters_${i}.pdf   \
+                -m "${SHAPEFILE}"                             \
+                -v                                            \
+                ${extra_args}                                 \
+            || exit 4;
+        fi
     done
 done
 
