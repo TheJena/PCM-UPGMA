@@ -310,6 +310,12 @@ for lang_name, lang_params in df.items():
     lang_params = lang_params.to_dict()
     debug(f"[{lang_name}]\t=\t{lang_params!r}".replace("'", ""))
     for param, formula in impl_dict.items():
+        if param not in lang_params:
+            warning(
+                f"Skipping missing parameter {param:<4} "
+                f"in language {lang_name!r}"
+            )
+            continue
         param_value_in_lang = str(lang_params[param])
         original_formula = str(formula)
         for k, v in lang_params.items():
