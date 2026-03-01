@@ -74,6 +74,7 @@ __DEFAULT = dict(
     verbose=0,
 )
 
+
 def is_column_excel_in_list(elem, list_to_check, pivot_cell):
     if elem == pivot_cell:
         return False
@@ -84,7 +85,7 @@ def is_column_excel_in_list(elem, list_to_check, pivot_cell):
     if to_check_elem == pivot_cell:
         return False
     return to_check_elem in list_to_check
-    
+
 
 def clean_excel_file(**kwargs):
     for k, v in kwargs.items():
@@ -275,7 +276,9 @@ def clean_excel_file(**kwargs):
             excel_kwargs["index_col"] = None
         new_expected_columns = []
         for elem in expected_columns:
-            if not is_column_excel_in_list(elem, kwargs["flatten_multi_index"], kwargs["pivot_cell"]):
+            if not is_column_excel_in_list(
+                elem, kwargs["flatten_multi_index"], kwargs["pivot_cell"]
+            ):
                 new_expected_columns += [elem]
         expected_columns = new_expected_columns
         debug(f"{expected_columns=}")
@@ -329,7 +332,9 @@ def clean_excel_file(**kwargs):
 
     base_columns_list = df.columns.to_list()
     for elem in base_columns_list:
-        if is_column_excel_in_list(elem, kwargs["flatten_multi_index"], kwargs["pivot_cell"]):
+        if is_column_excel_in_list(
+            elem, kwargs["flatten_multi_index"], kwargs["pivot_cell"]
+        ):
             df = df.drop(columns=elem)
     # Drop duplicated headers (again)
     drop_rows = [

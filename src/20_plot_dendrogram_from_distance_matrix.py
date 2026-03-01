@@ -29,20 +29,16 @@ simple agglomerative (bottom-up) hierarchical clustering method
 Usage:
      mkdir -p out_plot && python3 src/01_plot_clusters.py -i out_preprocess -o out_plot | grep -i record | grep -o '\\[.*\\]' | sort -V |uniq -c
 """
-import numpy as np
 import pandas as pd
 
 # from matplotlib import colormaps
 # from matplotlib import colors
-from logging import debug  # , info, warning, critical
+from logging import debug, info  # , warning, critical
 from matplotlib import pyplot as plt
 from os.path import basename, join as join_path
-from scipy.spatial import distance
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import squareform
-from sklearn.cluster import AgglomerativeClustering
 from utility import get_cli_parser, initialize_logging
-import os
 
 
 DPI = 300
@@ -135,12 +131,13 @@ def read_and_make_dendrogram(
     out_file_name,
     plot_title,
     plot_x_label,
+    cutoff=0.56,
     input_sheet_name="Sheet1",
 ):
     languages = []
     square_distance_matrix = []
     try:
-        with open(input_file_name, 'r') as f:
+        with open(input_file_name, "r") as f:
             lines = f.readlines()
     except:
         info("Error while opening file!{input_file_name}")
@@ -158,7 +155,7 @@ def read_and_make_dendrogram(
         plot_title,
         plot_x_label,
         out_file_name,
-        0.56,
+        cutoff,
         labels=languages,
         # color_threshold=0.7,
         # link_color_func=lambda k: colors.to_hex(
@@ -175,7 +172,7 @@ def read_and_make_dendrogram(
 parser = get_cli_parser(__doc__, __file__)
 parser.add_argument(
     "-i",
-    "--input_file",
+    "--input-file",
     default="",
     help="File containing the processed distance matrix",
     metavar="str",
@@ -184,12 +181,19 @@ parser.add_argument(
 )
 parser.add_argument(
     "-o",
-    "--output_file",
-    default="",
-    help="File to which the dendrogram will be printed to",
+    "--output_directory",
+    default="./out_plot",
+    help="Directory that will contain results ()",
     metavar="str",
-    required=True,
     type=str,
+)
+parser.add_argument(
+    "-c",
+    "--cutoff",
+    default=0.56,
+    help="Cutoff used to generate clusters from dendrogram",
+    metavar="float",
+    type=float,
 )
 parser.add_argument(
     "-v",
@@ -207,16 +211,22 @@ initialize_logging(
 )
 
 num_plots = 1
+info(f"Cutoff = {parsed_args.cutoff:.2f}")
 
 
 results = list()
 groupings = list()
 for i in range(num_plots):
     results += [
-        read_and_make_dendrogram(parsed_args.input_file, 
-            parsed_args.output_file,
-            PLT_TITLE,
-            parsed_args.input_file.rstrip(".xlsx").replace("_", " "),
+        read_and_make_dendrogram(
+            parsed_args.input_file,
+            join_path(
+                parsed_args.output_directory,
+                basename(parsed_args.input_file).replace(".txt", ".svg"),
+            ),
+            f"{PLT_TITLE.rstrip(')')}, cutoff={parsed_args.cutoff:.2f})",
+            parsed_args.input_file.rstrip(".").replace("_", " "),
+            cutoff=parsed_args.cutoff,
         )
     ]
 
@@ -268,11 +278,20 @@ final_result = pd.DataFrame.from_dict(
     total_num_matches, orient="index", columns=languages
 )
 
+final_result.to_excel(
+    join_path(parsed_args.output_directory, "plot_clusters_result.xlsx")
+)
+
 out_string = get_output_clusters(
     clusters[num_plots], parsed_args, languages, shared_languages
 )
 
+with open(join_path(parsed_args.output_directory, "clusters.txt"), "w") as f:
+    debug(f"{num_plots} Tables Fused:\n{out_string}")
+    f.write(f"{num_plots!s} Tables Fused\n{out_string}")
+
 for k in range(num_plots):
+    info(f"plot_{k+1}:")
     clusters = {lang: list() for lang in languages}
     for source_dialect in languages:
         for dest_dialect in languages:
@@ -284,3 +303,7 @@ for k in range(num_plots):
     out_string = get_output_clusters(
         clusters, parsed_args, languages, groupings[k].keys()
     )
+    for i, cluster in enumerate(
+        [c for c in out_string.split("\n") if c not in ("C:", "")]
+    ):
+        info(f"\t\tcluster_{i+1}: {cluster}")
